@@ -1,0 +1,25 @@
+# Project-wide settings shared across all phases.
+#
+# Decisions that a single phase freezes as output (e.g. the station census's
+# chosen bounding box and study period) live next to that phase's data
+# instead, e.g. data/raw/station_census/census_scope.yaml -- this file is
+# only for settings that don't change per-run.
+
+conda_env: mon-des
+
+crs:
+  storage: "EPSG:4326"      # lat/lon -- what every data source natively uses
+  equal_area: "EPSG:6933"   # reproject to this only for area/population math
+
+grid_cell_size_deg: 0.05    # ~5-6 km at the equator
+
+# Names of the secrets expected in .env (not the secrets themselves).
+env_vars:
+  openaq_api_key: OPENAQ_API_KEY
+  cartodb_api_key: CARTODB_API_KEY
+  gee_project_id: GEE_PROJECT_ID
+
+data_dir:
+  raw: data/raw
+  processed: data/processed
+  clean: data/clean
