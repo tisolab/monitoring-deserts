@@ -20,6 +20,6 @@ env_vars:
   gee_project_id: GEE_PROJECT_ID
 
 data_dir:
-  raw: data/raw
-  processed: data/processed
-  clean: data/clean
+  raw: /home/tom/datascience/projects/monitoring_deserts/data/raw
+  processed: /home/tom/datascience/projects/monitoring_deserts/data/processed
+  clean: /home/tom/datascience/projects/monitoring_deserts/data/clean
