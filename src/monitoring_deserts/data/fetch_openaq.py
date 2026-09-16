@@ -21,6 +21,7 @@ of bulk paginated calls, regardless of how many stations are in the bbox.
 import time
 
 import pandas as pd
+import numpy as np
 from openaq.core.responses import LatestResponse
 
 
@@ -229,7 +230,7 @@ def flag_active_stations(
 
     Returns:
         pd.DataFrame: A copy of `stations_df` with added columns
-            `pollutant_sensor_id`, `datetime_last_utc`, `days_since_last`,
+            `pollutant_sensor_id`, `datetime_last_local`, `days_since_last`,
             and `is_active`.
     """
     if len(stations_df) != len(stations_list):
@@ -293,7 +294,8 @@ def pull_measurements(
         dict: Maps each sensor ID in `sensor_list` to its measurement
             response object, as returned by `measurements.list`. Downstream,
             `concat_measurements` uses these sensor IDs as the outer level
-            of a `(sensor_id, time_utc)` MultiIndex.
+            of a `(sensor_id, time_local)` MultiIndex. Local is used for
+            downstream compatibility with TROPOMI measurements.
 
     Raises:
         RuntimeError: If a given sensor's measurements cannot be fetched
@@ -331,6 +333,36 @@ def pull_measurements(
     return meas_dict
 
 
+def normalize_unit(unit: str) -> str:
+    """Normalize a measurement-unit string into a compact ASCII token.
+
+    Examples:
+        'µg/m³'  -> 'ugm3'
+        'μg/m3'  -> 'ugm3'
+        'ng/m³'  -> 'ngm3'
+        'mg/m³'  -> 'mgm3'
+        'ppm'    -> 'ppm'
+    """
+    import unicodedata
+    import re
+    # Decompose unicode -- turns superscripts like ³ into ASCII '3', ² into '2', etc.
+    s = unicodedata.normalize('NFKD', unit)
+
+    # Explicit replacements for characters NFKD doesn't reduce on its own
+    replacements = {
+        'µ': 'u',   # micro sign (U+00B5)
+        'μ': 'u',   # greek small letter mu (U+03BC) -- two visually identical
+                    # but distinct unicode characters; both show up in the wild
+    }
+    for old, new in replacements.items():
+        s = s.replace(old, new)
+
+    # Strip everything that isn't a letter or digit (slashes, spaces, carets, etc.)
+    s = re.sub(r'[^a-zA-Z0-9]', '', s)
+
+    return s.lower()
+
+
 def make_df_from_measurement(measurement, idx=0):
     """Convert one OpenAQ measurement response into a tidy, time-indexed DataFrame.
 
@@ -358,9 +390,13 @@ def make_df_from_measurement(measurement, idx=0):
             instead. Defaults to 0.
 
     Returns:
-        pd.DataFrame: Indexed by UTC period-start datetime, with columns
-            `concentration`, `unit`, `percent_coverage`. Empty (no rows)
-            if `measurement` has no results for the requested window.
+        pd.DataFrame: Indexed by local (not UTC) period-start datetime as a
+            naive `datetime64` (see note above on why the offset is
+            stripped), with columns `concentration`, `stdev`, `unit`,
+            `percent_coverage`, and `utc_offset` (the offset that was
+            stripped from the index, as e.g. `"+0530"`, kept in case UTC
+            needs to be recovered later). Empty (no rows) if `measurement`
+            has no results for the requested window.
 
     Raises:
         RuntimeError: If `measurement` doesn't expose a `.dict()` method
@@ -380,16 +416,19 @@ def make_df_from_measurement(measurement, idx=0):
         ) from exc
 
     columns = {
-        "value": "concentration",
+        "summary.avg": "concentration",
+        "summary.sd" : "stdev",
         "parameter.units": "unit",
-        "period.datetime_from.utc": "time_utc",
+        "period.datetime_from.local": "time_local",
         "coverage.percent_complete": "percent_coverage",
     }
 
     if not results:
-        empty = pd.DataFrame(columns=list(columns.values()))
-        empty = empty.set_index(pd.DatetimeIndex([], tz="UTC", name="time_utc"))
-        empty = empty[["concentration", "unit", "percent_coverage"]]
+        empty = pd.DataFrame(columns=list(columns.values()) + ["utc_offset"])
+        empty = empty.set_index(pd.DatetimeIndex([], name="time_local"))
+        empty = empty[
+            ["concentration", "stdev", "unit", "percent_coverage", "utc_offset"]
+        ]
         empty.name = idx
         return empty
 
@@ -407,14 +446,37 @@ def make_df_from_measurement(measurement, idx=0):
     meas = meas.loc[:, list(columns)].rename(columns=columns)
 
     try:
-        meas = meas.set_index(pd.to_datetime(meas["time_utc"], utc=True))
+        local_dt = pd.to_datetime(meas["time_local"], utc=False)
+        # Different sensors report in different local UTC offsets (e.g. a
+        # station in India vs. one in Pakistan); pandas has no single
+        # datetime64[tz] dtype that can hold more than one fixed offset at
+        # once, so concatenating tz-aware columns like that across sensors
+        # (see concat_measurements) silently downgrades them to `object`
+        # dtype, breaking `.dt` downstream. Stripping the offset here keeps
+        # the correct local wall-clock reading as a naive datetime64, which
+        # survives concatenation across sensors/timezones intact. The
+        # offset itself is saved separately (as e.g. "+0530") in case it's
+        # ever needed to recover UTC -- captured per-row rather than once
+        # per sensor, since it can differ within a single sensor's own
+        # rows across a DST transition.
+        if local_dt.dt.tz is not None:
+            meas["utc_offset"] = local_dt.dt.strftime("%z")
+            local_dt = local_dt.dt.tz_localize(None)
+        else:
+            meas["utc_offset"] = None
+        meas = meas.set_index(local_dt)
     except Exception as exc:
         raise RuntimeError(
-            f"Measurement for idx={idx!r} has an unparseable 'time_utc' "
+            f"Measurement for idx={idx!r} has an unparseable 'time_local' "
             f"column: {exc}"
         ) from exc
 
-    meas = meas[["concentration", "unit", "percent_coverage"]]
+    meas = meas[["concentration", "stdev", "unit", "percent_coverage", "utc_offset"]]
+    # Normalize units
+    try:
+        meas["unit"] = meas["unit"].apply(normalize_unit)
+    except Exception as exc:
+        pass
     meas.name = idx
     return meas
 
@@ -424,7 +486,7 @@ def concat_measurements(meas_dict):
 
     Converts each measurement in `meas_dict` with `make_df_from_measurement`,
     then concatenates the results into a single DataFrame with a
-    `(sensor_id, time_utc)` MultiIndex, so rows stay traceable to their
+    `(sensor_id, time_local)` MultiIndex, so rows stay traceable to their
     source sensor and downstream code can `.groupby(level="sensor_id")` or
     reindex per sensor.
 
@@ -434,10 +496,10 @@ def concat_measurements(meas_dict):
 
     Returns:
         pd.DataFrame: All measurements concatenated, with columns
-            `concentration`, `unit`, `percent_coverage` and a
-            `(sensor_id, time_utc)` MultiIndex. Empty (but still carrying
-            that MultiIndex shape) if `meas_dict` is empty or every
-            measurement in it had no results.
+            `concentration`, `stdev`, `unit`, `percent_coverage`,
+            `utc_offset` and a `(sensor_id, time_local)` MultiIndex. Empty
+            (but still carrying that MultiIndex shape) if `meas_dict` is
+            empty or every measurement in it had no results.
 
     Raises:
         TypeError: If `meas_dict` isn't a dict (e.g. a plain list of
@@ -456,13 +518,14 @@ def concat_measurements(meas_dict):
 
     if not meas_dict:
         empty_index = pd.MultiIndex.from_arrays(
-            [[], []], names=["sensor_id", "time_utc"]
+            [[], []], names=["pm25_sensor_id", "time_local"]
         )
         return pd.DataFrame(
-            columns=["concentration", "unit", "percent_coverage"], index=empty_index
+            columns=["concentration", "stdev", "unit", "percent_coverage", "utc_offset"],
+            index=empty_index,
         )
 
     df_list = [
         make_df_from_measurement(meas, idx=s_id) for s_id, meas in meas_dict.items()
     ]
-    return pd.concat(df_list, keys=meas_dict.keys(), names=["sensor_id"])
+    return pd.concat(df_list, keys=meas_dict.keys(), names=["pm25_sensor_id"])
