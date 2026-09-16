@@ -290,15 +290,26 @@ def pull_measurements(
             Defaults to 25.
 
     Returns:
-        list: One measurement response object per sensor in `sensor_list`,
-            in the same order, as returned by `measurements.list`.
+        dict: Maps each sensor ID in `sensor_list` to its measurement
+            response object, as returned by `measurements.list`. Downstream,
+            `concat_measurements` uses these sensor IDs as the outer level
+            of a `(sensor_id, time_utc)` MultiIndex.
 
     Raises:
         RuntimeError: If a given sensor's measurements cannot be fetched
             from OpenAQ.
+        ValueError: If `sensor_list` contains the same sensor ID more than
+            once -- fetching it twice would silently discard the first
+            result when both are stored under the same dict key.
     """
-    meas_list = []
+    meas_dict = {}
     for loopn, sensor_id in enumerate(sensor_list):
+        if sensor_id in meas_dict:
+            raise ValueError(
+                f"sensor_list contains duplicate sensor ID {sensor_id!r} "
+                f"(at position {loopn}); pulling it again would silently "
+                f"overwrite the measurements already fetched for it."
+            )
         if loopn % 50 == 0 and loopn > 0:
             print(f"Pulling sensor {loopn} of {len(sensor_list)}...")
         try:
@@ -315,9 +326,9 @@ def pull_measurements(
                 f"Failed to fetch measurements for sensor {sensor_id} "
                 f"({loopn + 1} of {len(sensor_list)}) from OpenAQ: {exc}"
             ) from exc
-        meas_list.append(measurement)
+        meas_dict[sensor_id] = measurement
         time.sleep(1)  # 1 request/s
-    return meas_list
+    return meas_dict
 
 
 def make_df_from_measurement(measurement, idx=0):
@@ -339,10 +350,12 @@ def make_df_from_measurement(measurement, idx=0):
             `pull_measurements`, exposing a `.dict()` method with a
             `results` list of period records.
         idx: Identifier for the sensor/station this measurement belongs
-            to. Stored on the returned DataFrame's `.name` attribute so
-            rows can still be traced back to their source after
-            `concat_measurements` concatenates several of these together.
-            Defaults to 0.
+            to -- typically the sensor ID key from the `meas_dict` returned
+            by `pull_measurements`. Stored on the returned DataFrame's
+            `.name` attribute for traceability if this function is used on
+            its own; `concat_measurements` doesn't rely on it, since it
+            labels each measurement's rows via `pd.concat(..., keys=...)`
+            instead. Defaults to 0.
 
     Returns:
         pd.DataFrame: Indexed by UTC period-start datetime, with columns
@@ -406,32 +419,50 @@ def make_df_from_measurement(measurement, idx=0):
     return meas
 
 
-def concat_measurements(meas_list):
-    """Convert a list of OpenAQ measurement responses into one combined DataFrame.
+def concat_measurements(meas_dict):
+    """Convert a dict of OpenAQ measurement responses into one combined DataFrame.
 
-    Converts each item in `meas_list` with `make_df_from_measurement`,
-    tagging it with its position in the list (so rows can be traced back
-    to their source sensor), then concatenates the results.
+    Converts each measurement in `meas_dict` with `make_df_from_measurement`,
+    then concatenates the results into a single DataFrame with a
+    `(sensor_id, time_utc)` MultiIndex, so rows stay traceable to their
+    source sensor and downstream code can `.groupby(level="sensor_id")` or
+    reindex per sensor.
 
     Parameters:
-        meas_list (list): Measurement response objects, as returned by
-            `pull_measurements`.
+        meas_dict (dict): Maps sensor ID to measurement response object,
+            as returned by `pull_measurements`.
 
     Returns:
-        pd.DataFrame: All measurements concatenated, indexed by UTC
-            datetime, with columns `concentration`, `unit`,
-            `percent_coverage`. Empty if `meas_list` is empty or every
+        pd.DataFrame: All measurements concatenated, with columns
+            `concentration`, `unit`, `percent_coverage` and a
+            `(sensor_id, time_utc)` MultiIndex. Empty (but still carrying
+            that MultiIndex shape) if `meas_dict` is empty or every
             measurement in it had no results.
 
     Raises:
-        RuntimeError: If any measurement in `meas_list` cannot be
+        TypeError: If `meas_dict` isn't a dict (e.g. a plain list of
+            measurements, as `pull_measurements` used to return).
+        RuntimeError: If any measurement in `meas_dict` cannot be
             converted (see `make_df_from_measurement`).
         KeyError: If any measurement is missing an expected column (see
             `make_df_from_measurement`).
     """
+    if not isinstance(meas_dict, dict):
+        raise TypeError(
+            f"concat_measurements expects a dict mapping sensor ID to "
+            f"measurement (as returned by pull_measurements), got "
+            f"{type(meas_dict)!r}."
+        )
+
+    if not meas_dict:
+        empty_index = pd.MultiIndex.from_arrays(
+            [[], []], names=["sensor_id", "time_utc"]
+        )
+        return pd.DataFrame(
+            columns=["concentration", "unit", "percent_coverage"], index=empty_index
+        )
+
     df_list = [
-        make_df_from_measurement(meas, idx=idx) for idx, meas in enumerate(meas_list)
+        make_df_from_measurement(meas, idx=s_id) for s_id, meas in meas_dict.items()
     ]
-    if not df_list:
-        return pd.DataFrame(columns=["concentration", "unit", "percent_coverage"])
-    return pd.concat(df_list)
+    return pd.concat(df_list, keys=meas_dict.keys(), names=["sensor_id"])
