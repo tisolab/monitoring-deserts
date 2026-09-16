@@ -113,6 +113,25 @@ def pull_stations(openaq_client, bbox, pollutant_id=2, limit=1000):
     return stations_df, stations_list
 
 
+def _get_pollutant_sensor(station, pollutant_id):
+    """Return a station's `Sensor` object for a given pollutant, or None.
+
+    Parameters:
+        station: A station object as returned in `pull_stations`'
+            `stations_list`, exposing a `sensors` list whose items expose
+            `parameter.id`.
+        pollutant_id (int): OpenAQ parameter ID to match against.
+
+    Returns:
+        openaq.core.responses.Sensor | None: The matching sensor object, or
+            None if the station has no sensor for `pollutant_id`.
+    """
+    return next(
+        (sensor for sensor in station.sensors if sensor.parameter.id == pollutant_id),
+        None,
+    )
+
+
 def get_pollutant_sensor_id(station, pollutant_id):
     """Return a station's sensor ID for a given pollutant, or None if absent.
 
@@ -126,14 +145,8 @@ def get_pollutant_sensor_id(station, pollutant_id):
         int | None: The matching sensor ID, or None if the station has no
             sensor for `pollutant_id`.
     """
-    return next(
-        (
-            sensor.id
-            for sensor in station.sensors
-            if sensor.parameter.id == pollutant_id
-        ),
-        None,
-    )
+    sensor = _get_pollutant_sensor(station, pollutant_id)
+    return sensor.id if sensor is not None else None
 
 
 def get_latest_by_parameter(openaq_client, parameters_id, limit=1000):
@@ -204,15 +217,34 @@ def get_latest_by_parameter(openaq_client, parameters_id, limit=1000):
 
 
 def flag_active_stations(
-    stations_df, stations_list, pollutant_id, latest_df, max_age_days=365, as_of=None
+    stations_df,
+    stations_list,
+    pollutant_id,
+    latest_df,
+    max_age_days=365,
+    as_of=None,
+    date_from=None,
 ):
-    """Flag which stations' pollutant sensor reported within `max_age_days`.
+    """Flag which stations' pollutant sensor is both recent and old enough.
 
     Joins each station's pollutant-specific sensor ID against the bulk
     latest-by-parameter feed (`get_latest_by_parameter`) to check how long
     ago it last reported, without a per-sensor API round trip. Uses the
     feed's UTC timestamp for the age comparison (not the local one) so the
     result doesn't depend on each station's own timezone offset.
+
+    If `date_from` is given, a station is only flagged active if its sensor
+    also started reporting on or before `date_from` -- a sensor that's
+    currently reporting but only came online a few months ago can never
+    have full coverage over an analysis window starting earlier than that,
+    no matter how "active" it looks by recency alone. This check is free:
+    `sensor.datetime_first` is already present on the `Sensor` objects in
+    `stations_list` (from `pull_stations`'s `locations.list` call), so no
+    extra API round trip is needed to catch this before ever calling the
+    much more expensive `pull_measurements`. Note this only rules out
+    sensors that started too late -- it can't detect gaps *within* the
+    window (e.g. a sensor that went offline for six months); that still
+    needs to be checked against the actual pulled measurements.
 
     Parameters:
         stations_df (pd.DataFrame): Station table as returned by
@@ -227,11 +259,21 @@ def flag_active_stations(
             reading for the station to be flagged active. Defaults to 365.
         as_of (pd.Timestamp | None): Timezone-aware reference time to
             measure recency against. Defaults to `pd.Timestamp.now(tz="UTC")`.
+        date_from (str | pd.Timestamp | None): Start of the analysis window
+            a station needs to already have been reporting by. If None
+            (the default), this check is skipped and `is_active` reflects
+            recency only, as before.
 
     Returns:
         pd.DataFrame: A copy of `stations_df` with added columns
-            `pollutant_sensor_id`, `datetime_last_local`, `days_since_last`,
-            and `is_active`.
+            `pollutant_sensor_id`, `datetime_last_utc`, `days_since_last`,
+            `is_active`, and, when `date_from` is given,
+            `pollutant_sensor_datetime_first_utc` and `covers_window_start`
+            (`is_active` is then the AND of recency and this).
+
+    Raises:
+        ValueError: If `stations_df` and `stations_list` aren't
+            row-aligned, or if `date_from` can't be parsed as a timestamp.
     """
     if len(stations_df) != len(stations_list):
         raise ValueError(
@@ -253,9 +295,33 @@ def flag_active_stations(
 
     parsed_last = pd.to_datetime(out["datetime_last_utc"], utc=True, errors="coerce")
     out["days_since_last"] = (as_of - parsed_last).dt.days
-    out["is_active"] = out["days_since_last"].notna() & out["days_since_last"].le(
+    is_recent = out["days_since_last"].notna() & out["days_since_last"].le(
         max_age_days
     )
+
+    if date_from is None:
+        out["is_active"] = is_recent
+        return out
+
+    try:
+        date_from_ts = pd.Timestamp(date_from, tz="UTC")
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid date_from={date_from!r}: {exc}") from exc
+
+    def _datetime_first_utc(station):
+        sensor = _get_pollutant_sensor(station, pollutant_id)
+        if sensor is None or sensor.datetime_first is None:
+            return None
+        return sensor.datetime_first.utc
+
+    out["pollutant_sensor_datetime_first_utc"] = [
+        _datetime_first_utc(station) for station in stations_list
+    ]
+    parsed_first = pd.to_datetime(
+        out["pollutant_sensor_datetime_first_utc"], utc=True, errors="coerce"
+    )
+    out["covers_window_start"] = parsed_first.notna() & parsed_first.le(date_from_ts)
+    out["is_active"] = is_recent & out["covers_window_start"]
     return out
 
 

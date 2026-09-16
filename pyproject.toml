@@ -8,6 +8,10 @@ version = "0.1.0"
 description = "Mapping air-quality monitoring gaps and environmental justice in South Asia"
 requires-python = ">=3.11"
 readme = "README.md"
+dependencies = [
+    "pandas>=2.0",
+    "openaq>=1.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
