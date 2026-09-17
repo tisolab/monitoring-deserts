@@ -1,0 +1,13 @@
+bounding_box:
+  min_lon: 60.424805
+  min_lat: 5.353521
+  max_lon: 93.383789
+  max_lat: 38.272689
+period:
+  start: '2025-03-01'
+  end: '2026-07-01'
+pm25_parameter_id: 2
+max_age_days: 100
+n_candidate_stations: 1352
+n_recent_stations: 893
+n_active_stations: 344

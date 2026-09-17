@@ -1,0 +1,7 @@
+concentration_limit: 600
+coverage_threshold: 60.0
+dropped_rows:
+  no_measurement: 112
+  coverage_less_than_60%: 478
+  value_greater_than_600: 8
+  non_positive: 16
