@@ -23,3 +23,7 @@ data_dir:
   raw: /home/tom/datascience/projects/monitoring_deserts/data/raw
   processed: /home/tom/datascience/projects/monitoring_deserts/data/processed
   clean: /home/tom/datascience/projects/monitoring_deserts/data/clean
+
+output_dir:
+    maps: /home/tom/datascience/projects/monitoring_deserts/outputs/maps
+    plots: /home/tom/datascience/projects/monitoring_deserts/outputs/plots
