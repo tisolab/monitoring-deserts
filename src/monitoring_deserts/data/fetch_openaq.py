@@ -1,8 +1,10 @@
 """Helpers for the Phase A OpenAQ station census.
 
-Fetches candidate PM2.5 stations in a bounding box, then checks which ones
-are still active by joining them against OpenAQ's network-wide
-`/parameters/{id}/latest` feed:
+Two independent checks, kept deliberately separate:
+
+Recency (is this sensor reporting *right now*) -- a cheap, bulk,
+"now"-anchored pre-filter, used only to narrow the candidate list before
+the expensive per-sensor pull below:
 
     a) pull the `LatestResponse` for the PM2.5 parameter (one paginated
        sequence of requests, network-wide -- `get_latest_by_parameter`),
@@ -16,12 +18,25 @@ This avoids calling `sensors.get()` once per candidate station, which is
 what made the original version of this notebook hit a `ServerError` after a
 few hundred sequential requests -- everything here is a small, fixed number
 of bulk paginated calls, regardless of how many stations are in the bbox.
+
+Period coverage (does this sensor's own reporting period cover a given
+date range) -- a separate, "now"-independent question, answered purely
+from each sensor's `datetime_first`/`datetime_last` (`pull_sensor_period`,
+paced, cached by the caller) via `sensors_covering_period` /
+`count_sensors_covering_period`. This is what decides which sensors are
+usable for a chosen study period; it has nothing to do with recency, and
+deliberately doesn't go through `flag_active_stations` -- an earlier
+version bundled both into one `is_active` flag, which was a source of
+bugs (a period-coverage question silently also depended on wall-clock
+time at call time).
 """
 
 import time
+import warnings
 
 import pandas as pd
 import numpy as np
+from openaq.core.exceptions import ServerError
 from openaq.core.responses import LatestResponse
 
 
@@ -216,6 +231,193 @@ def get_latest_by_parameter(openaq_client, parameters_id, limit=1000):
     return pd.DataFrame(rows)
 
 
+def pull_sensor_period(openaq_client, sensor_list, on_sensor_done=None):
+    """Fetch each sensor's reporting period (`datetime_first`/`datetime_last`).
+
+    `station.sensors` entries (as returned by `pull_stations`'
+    `locations.list` call) are lightweight `SensorBase` objects -- id, name,
+    and parameter only, no `datetime_first`/`datetime_last`. Only the full
+    `Sensor` object returned by `GET /sensors/{id}` carries that, and
+    there's no bulk endpoint for it (the network-wide
+    `/parameters/{id}/latest` used by `get_latest_by_parameter` gives only
+    the *latest* reading per sensor). So this calls `sensors.get()` once
+    per sensor in `sensor_list`, paced at 1 request/s to respect OpenAQ's
+    rate limit -- the same pattern `pull_measurements` uses for the same
+    reason.
+
+    A per-sensor `openaq.core.exceptions.ServerError` (and its subclasses --
+    `BadGatewayError`, `ServiceUnavailableError`, `GatewayTimeoutError`; the
+    5xx-class errors OpenAQ occasionally returns for an individual sensor)
+    is treated as transient: it's logged via `warnings.warn` and that
+    sensor is recorded with `datetime_first`/`datetime_last` both None, and
+    the pull continues -- one bad sensor shouldn't abort a pull of hundreds.
+    Any other failure still raises immediately rather than silently
+    skipping a sensor, since it more likely means something's actually
+    wrong (bad ID, auth, rate limit). Either way, no sensor fetched before
+    a raised failure is lost: pass `on_sensor_done` to persist each result
+    as it comes in, so a caller that caches to disk (e.g. appending to a
+    CSV) doesn't have to re-pull sensors already fetched in a prior,
+    interrupted run.
+
+    Parameters:
+        openaq_client (openaq.OpenAQ): An authenticated OpenAQ client.
+        sensor_list (list[int]): OpenAQ sensor IDs to fetch.
+        on_sensor_done (callable | None): Optional callback invoked as
+            `on_sensor_done(sensor_id, row)` immediately after each sensor
+            is successfully fetched, where `row` is a dict with
+            `datetime_first`/`datetime_last` keys (same shape as a row of
+            the returned DataFrame). Called before the rate-limit sleep, so
+            a slow callback doesn't itself violate the pacing.
+
+    Returns:
+        tuple[pd.DataFrame, dict]:
+            - pd.DataFrame indexed by sensor ID, with columns
+              `datetime_first` and `datetime_last` (UTC ISO strings, or
+              None where the sensor has no recorded value for either, or
+              where the sensor was skipped after a `ServerError`).
+            - dict mapping each *successfully* fetched sensor ID to its raw
+              `SensorsResponse` object, mirroring `pull_measurements`'
+              return shape so a downstream parsing failure doesn't require
+              re-fetching from the API. Sensors skipped after a
+              `ServerError` have no entry.
+
+    Raises:
+        RuntimeError: If a given sensor's details can't be fetched from
+            OpenAQ for a reason other than a transient `ServerError`.
+        ValueError: If `sensor_list` contains the same sensor ID more than
+            once -- fetching it twice would silently discard the first
+            response, since both would be stored under the same dict key.
+    """
+    resp_dict = {}
+    rows = []
+    for loopn, sensor_id in enumerate(sensor_list):
+        if sensor_id in resp_dict:
+            raise ValueError(
+                f"sensor_list contains duplicate sensor ID {sensor_id!r} "
+                f"(at position {loopn}); pulling it again would silently "
+                f"overwrite the response already fetched for it."
+            )
+        if loopn % 50 == 0 and loopn > 0:
+            print(f"Pulling sensor {loopn} of {len(sensor_list)}...")
+        try:
+            resp = openaq_client.sensors.get(sensor_id)
+        except ServerError as exc:
+            warnings.warn(
+                f"Sensor {sensor_id} ({loopn + 1} of {len(sensor_list)}) "
+                f"skipped after a server-side error from OpenAQ: {exc}"
+            )
+            resp = None
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to fetch sensor {sensor_id} ({loopn + 1} of "
+                f"{len(sensor_list)}) from OpenAQ: {exc}"
+            ) from exc
+        else:
+            resp_dict[sensor_id] = resp
+
+        sensor = resp.results[0] if resp is not None and resp.results else None
+        row = {
+            "datetime_first": (
+                sensor.datetime_first.utc
+                if sensor is not None and sensor.datetime_first is not None
+                else None
+            ),
+            "datetime_last": (
+                sensor.datetime_last.utc
+                if sensor is not None and sensor.datetime_last is not None
+                else None
+            ),
+        }
+        rows.append({"sensor_id": sensor_id, **row})
+        if on_sensor_done is not None:
+            on_sensor_done(sensor_id, row)
+        time.sleep(1)  # 1 request/s
+
+    period_df = pd.DataFrame(rows).set_index("sensor_id")
+    return period_df, resp_dict
+
+
+def sensors_covering_period(sensor_period_df, date_end, n_months=None, date_start=None):
+    """Return sensors whose reporting period fully covers [date_start, date_end].
+
+    A sensor is included if `datetime_first` is on/before `date_start` AND
+    `datetime_last` is on/after `date_end` -- i.e. it was already reporting
+    by the window's start and was still reporting at its end. Sensor-only:
+    no station/latest-feed join, no "now" reference (see the module
+    docstring for why this is kept separate from `flag_active_stations`).
+
+    Parameters:
+        sensor_period_df (pd.DataFrame): Indexed by sensor ID, with
+            `datetime_first`/`datetime_last` columns -- the shape returned
+            by `pull_sensor_period`.
+        date_end (str | pd.Timestamp): End of the coverage window.
+        n_months (int | None): Number of months before `date_end` the
+            window should start. 0 is allowed (a zero-width window, i.e.
+            "is this sensor still reporting exactly at `date_end`").
+            Mutually exclusive with `date_start`; exactly one of the two
+            must be given.
+        date_start (str | pd.Timestamp | None): Explicit start of the
+            coverage window. Mutually exclusive with `n_months`.
+
+    Returns:
+        pd.DataFrame: The subset of `sensor_period_df` (same columns,
+            indexed by sensor ID) satisfying the full-coverage check above.
+
+    Raises:
+        ValueError: If both or neither of `n_months`/`date_start` are
+            given, if a date can't be parsed, or if the resulting window
+            start is after its end.
+    """
+    if (n_months is None) == (date_start is None):
+        raise ValueError(
+            "Provide exactly one of n_months or date_start, not both or "
+            "neither."
+        )
+
+    try:
+        date_end_ts = pd.Timestamp(date_end, tz="UTC")
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid date_end={date_end!r}: {exc}") from exc
+
+    if date_start is not None:
+        try:
+            date_start_ts = pd.Timestamp(date_start, tz="UTC")
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid date_start={date_start!r}: {exc}") from exc
+    else:
+        date_start_ts = date_end_ts - pd.DateOffset(months=n_months)
+
+    if date_start_ts > date_end_ts:
+        raise ValueError(
+            f"date_start ({date_start_ts}) must be on or before date_end "
+            f"({date_end_ts})."
+        )
+
+    first = pd.to_datetime(sensor_period_df["datetime_first"], utc=True, errors="coerce")
+    last = pd.to_datetime(sensor_period_df["datetime_last"], utc=True, errors="coerce")
+
+    covers = first.notna() & last.notna() & first.le(date_start_ts) & last.ge(date_end_ts)
+    return sensor_period_df.loc[covers]
+
+
+def count_sensors_covering_period(sensor_period_df, date_end, n_months=None, date_start=None):
+    """Count sensors whose reporting period fully covers [date_start, date_end].
+
+    Thin wrapper around `sensors_covering_period` -- see it for the
+    full-coverage definition and parameters. Use this when only the count
+    is needed; use `sensors_covering_period` directly when the matching
+    sensor IDs themselves are needed (e.g. to slice a station table).
+
+    Returns:
+        int: Number of sensors satisfying the full-coverage check.
+    """
+    return len(
+        sensors_covering_period(
+            sensor_period_df, date_end, n_months=n_months, date_start=date_start
+        )
+    )
+
+
 def flag_active_stations(
     stations_df,
     stations_list,
@@ -223,9 +425,8 @@ def flag_active_stations(
     latest_df,
     max_age_days=365,
     as_of=None,
-    date_from=None,
 ):
-    """Flag which stations' pollutant sensor is both recent and old enough.
+    """Flag which stations' pollutant sensor has reported recently.
 
     Joins each station's pollutant-specific sensor ID against the bulk
     latest-by-parameter feed (`get_latest_by_parameter`) to check how long
@@ -233,18 +434,15 @@ def flag_active_stations(
     feed's UTC timestamp for the age comparison (not the local one) so the
     result doesn't depend on each station's own timezone offset.
 
-    If `date_from` is given, a station is only flagged active if its sensor
-    also started reporting on or before `date_from` -- a sensor that's
-    currently reporting but only came online a few months ago can never
-    have full coverage over an analysis window starting earlier than that,
-    no matter how "active" it looks by recency alone. This check is free:
-    `sensor.datetime_first` is already present on the `Sensor` objects in
-    `stations_list` (from `pull_stations`'s `locations.list` call), so no
-    extra API round trip is needed to catch this before ever calling the
-    much more expensive `pull_measurements`. Note this only rules out
-    sensors that started too late -- it can't detect gaps *within* the
-    window (e.g. a sensor that went offline for six months); that still
-    needs to be checked against the actual pulled measurements.
+    This is a recency check only, anchored to `as_of` ("now" by default) --
+    it says nothing about whether a sensor's reporting period covers any
+    particular study window. For that, see `sensors_covering_period` /
+    `count_sensors_covering_period`, which work off `pull_sensor_period`'s
+    output and have no "now" dependency at all. Keeping the two separate
+    is deliberate: an earlier version of this function folded a
+    `date_from` coverage check into `is_active` too, which meant a
+    period-coverage result silently also depended on wall-clock time at
+    call time -- confusing, and a source of bugs.
 
     Parameters:
         stations_df (pd.DataFrame): Station table as returned by
@@ -259,21 +457,15 @@ def flag_active_stations(
             reading for the station to be flagged active. Defaults to 365.
         as_of (pd.Timestamp | None): Timezone-aware reference time to
             measure recency against. Defaults to `pd.Timestamp.now(tz="UTC")`.
-        date_from (str | pd.Timestamp | None): Start of the analysis window
-            a station needs to already have been reporting by. If None
-            (the default), this check is skipped and `is_active` reflects
-            recency only, as before.
 
     Returns:
         pd.DataFrame: A copy of `stations_df` with added columns
             `pollutant_sensor_id`, `datetime_last_utc`, `days_since_last`,
-            `is_active`, and, when `date_from` is given,
-            `pollutant_sensor_datetime_first_utc` and `covers_window_start`
-            (`is_active` is then the AND of recency and this).
+            and `is_active` (recency only).
 
     Raises:
         ValueError: If `stations_df` and `stations_list` aren't
-            row-aligned, or if `date_from` can't be parsed as a timestamp.
+            row-aligned.
     """
     if len(stations_df) != len(stations_list):
         raise ValueError(
@@ -295,33 +487,9 @@ def flag_active_stations(
 
     parsed_last = pd.to_datetime(out["datetime_last_utc"], utc=True, errors="coerce")
     out["days_since_last"] = (as_of - parsed_last).dt.days
-    is_recent = out["days_since_last"].notna() & out["days_since_last"].le(
+    out["is_active"] = out["days_since_last"].notna() & out["days_since_last"].le(
         max_age_days
     )
-
-    if date_from is None:
-        out["is_active"] = is_recent
-        return out
-
-    try:
-        date_from_ts = pd.Timestamp(date_from, tz="UTC")
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"Invalid date_from={date_from!r}: {exc}") from exc
-
-    def _datetime_first_utc(station):
-        sensor = _get_pollutant_sensor(station, pollutant_id)
-        if sensor is None or sensor.datetime_first is None:
-            return None
-        return sensor.datetime_first.utc
-
-    out["pollutant_sensor_datetime_first_utc"] = [
-        _datetime_first_utc(station) for station in stations_list
-    ]
-    parsed_first = pd.to_datetime(
-        out["pollutant_sensor_datetime_first_utc"], utc=True, errors="coerce"
-    )
-    out["covers_window_start"] = parsed_first.notna() & parsed_first.le(date_from_ts)
-    out["is_active"] = is_recent & out["covers_window_start"]
     return out
 
 
