@@ -127,7 +127,7 @@ def build_month_windows(DAY_START, DAY_END):
 
 
 def pull_monthly_stats(
-    image_collection, feature_collection, month_windows, scale=1000, on_month_done=None
+    image_collection, feature_collection, month_windows, im_name, scale=1000, on_month_done=None
 ):
     """Pull monthly-averaged Earth Engine band statistics over a FeatureCollection.
 
@@ -194,7 +194,7 @@ def pull_monthly_stats(
 
         df["month"] = month_start
         if on_month_done is not None:
-            on_month_done(month_start, df)
+            on_month_done(month_start, df, im_name)
         monthly_stats.append(df)
 
     return monthly_stats
