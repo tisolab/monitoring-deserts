@@ -11,8 +11,12 @@ def stations_to_feature_collection(df, radius_m=2000):
     One `ee.Feature` per row of `df`, not per unique station -- a station
     legitimately appears more than once if `df` is a row-per-month ground
     truth table (as `03_satellite_features_extraction.ipynb` passes it).
-    Each feature carries a `station_id` property so a downstream
-    `.reduceRegions()` result can be joined back to the right row.
+    Each feature carries a `station_id` property, which a caller uses to
+    match each `.reduceRegions()` result back to the row it came from. When
+    `df` has more than one row per station (e.g. one per month), run
+    `.reduceRegions()` separately per month window and match results on
+    `station_id` within that single call -- `station_id` alone doesn't
+    disambiguate which month a given feature's row belongs to.
 
     Parameters:
         df (pd.DataFrame): Must have `station_id`, `longitude`, `latitude`
@@ -79,7 +83,7 @@ def build_month_windows(DAY_START, DAY_END):
     month-start whenever DAY_START isn't itself the 1st -- e.g.
     DAY_START="2025-03-15" would jump straight to "2025-04-01", silently
     dropping about two weeks of real study-period coverage with no warning
-    at all. Don't "simplify" this back to `freq="MS"`.
+    at all. 
 
     Parameters:
         DAY_START (str | pd.Timestamp | datetime.datetime): Start of the
