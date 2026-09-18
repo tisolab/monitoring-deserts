@@ -3,6 +3,7 @@ import warnings
 import pandas as pd
 
 import ee
+import geemap
 
 
 def stations_to_feature_collection(df, radius_m=2000):
@@ -83,7 +84,7 @@ def build_month_windows(DAY_START, DAY_END):
     month-start whenever DAY_START isn't itself the 1st -- e.g.
     DAY_START="2025-03-15" would jump straight to "2025-04-01", silently
     dropping about two weeks of real study-period coverage with no warning
-    at all. 
+    at all.
 
     Parameters:
         DAY_START (str | pd.Timestamp | datetime.datetime): Start of the
@@ -123,3 +124,77 @@ def build_month_windows(DAY_START, DAY_END):
 
     d_range = pd.date_range(start_ts, end_ts, freq=pd.DateOffset(months=1))
     return list(zip(d_range[:-1], d_range[1:]))
+
+
+def pull_monthly_stats(
+    image_collection, feature_collection, month_windows, scale=1000, on_month_done=None
+):
+    """Pull monthly-averaged Earth Engine band statistics over a FeatureCollection.
+
+    For each (month_start, month_end) window in `month_windows`, takes the mean of
+    `image_collection` over that window, reduces it over `feature_collection` (mean and
+    standard deviation per feature, via `ee.Reducer.mean().combine(ee.Reducer.stdDev(), ...)`),
+    and converts the result to a pandas DataFrame with a `month` column set to that window's
+    start. One Earth Engine `reduceRegions` call per window, since `reduceRegions` only reduces
+    over a single, already-filtered image.
+
+    `geemap.ee_to_df(..., remove_geom=False)` plus a manual `.drop(columns=["geo"])` is used
+    deliberately instead of `ee_to_df`'s default geometry removal, which hits a documented
+    geemap/pandas incompatibility (`ValueError: Cannot specify both 'axis' and
+    'index'/'columns'`) on current pandas versions. Don't "simplify" this back to the default.
+
+    Parameters:
+        image_collection (ee.ImageCollection): Band(s) to reduce, e.g. TROPOMI NO2 or AAI,
+            already `.select()`-ed down to the band(s) of interest.
+        feature_collection (ee.FeatureCollection): Regions to reduce over, e.g. from
+            `stations_to_feature_collection`.
+        month_windows (list[tuple]): (month_start, month_end) pairs, e.g. from
+            `build_month_windows`.
+        scale (int): Nominal reduction scale in meters. Defaults to 1000.
+        on_month_done (callable | None): Optional callback invoked as
+            `on_month_done(month_start, df)` immediately after each month's DataFrame is
+            built, before it's appended to the returned list -- lets a caller persist
+            progress incrementally (e.g. one file per month) so a failure partway through
+            doesn't lose months already pulled. This function does no resuming itself: to
+            resume after a partial failure, the caller should filter `month_windows` down to
+            months not yet persisted before calling again -- the same pattern
+            `pull_sensor_period` (`fetch_openaq.py`) uses via its own `on_sensor_done`.
+
+    Returns:
+        list[pd.DataFrame]: One DataFrame per month window, each with a `month` column plus
+            whatever per-feature columns `ee_to_df` produced (station_id, band mean/stdDev,
+            ...).
+
+    Raises:
+        ValueError: If `month_windows` is empty.
+        RuntimeError: If Earth Engine rejects a given month's request -- includes which
+            month failed and how many months succeeded before it.
+    """
+    if not month_windows:
+        raise ValueError("month_windows is empty -- nothing to pull.")
+
+    monthly_stats = []
+    for month_start, month_end in month_windows:
+        try:
+            monthly_poll = image_collection.filterDate(month_start, month_end).mean()
+            stats_feature_collection = monthly_poll.reduceRegions(
+                collection=feature_collection,
+                reducer=ee.Reducer.mean().combine(ee.Reducer.stdDev(), sharedInputs=True),
+                scale=scale,
+            )
+            df = geemap.ee_to_df(stats_feature_collection, remove_geom=False).drop(
+                columns=["geo"], errors="ignore"
+            )
+        except ee.EEException as exc:
+            raise RuntimeError(
+                f"Earth Engine rejected the request for month {month_start} "
+                f"({len(monthly_stats)} of {len(month_windows)} months already "
+                f"pulled): {exc}"
+            ) from exc
+
+        df["month"] = month_start
+        if on_month_done is not None:
+            on_month_done(month_start, df)
+        monthly_stats.append(df)
+
+    return monthly_stats
