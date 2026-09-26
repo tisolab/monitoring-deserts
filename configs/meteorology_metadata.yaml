@@ -1,0 +1,34 @@
+bbox_requested:
+- 38.772689
+- 59.924805
+- 4.853521
+- 93.883789
+bbox_pad_deg: 0.5
+product_type: monthly_averaged_reanalysis
+variables:
+  raw:
+  - t2m
+  - d2m
+  - u10
+  - v10
+  - blh
+  - tp
+  - sp
+  renamed:
+    t2m: temperature
+    d2m: dew_point
+    u10: u_wind
+    v10: v_wind
+    blh: boundary_layer_height
+    tp: total_precipitation
+    sp: surface_pressure
+derived_variables:
+- relative_humidity
+- wind_magnitude
+interpolation_method: linear
+n_stations: 344
+n_months: 16
+n_station_data_points: 5504
+n_grid_cells: 434940
+missing_station_values: 0
+missing_grid_values: 0
