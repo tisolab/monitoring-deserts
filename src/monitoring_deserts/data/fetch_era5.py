@@ -323,3 +323,79 @@ def concat_datasets(*datasets):
         )
 
     return combined
+
+
+def interpolate(dataset, dataframe, dimname, method="linear"):
+    """Interpolate an xarray Dataset onto pointwise (longitude, latitude) coordinates.
+
+    Uses xarray's pointwise indexing (Section 5.3): passing longitude and
+    latitude as two `xr.DataArray`s sharing the same new dimension name
+    (`dimname`) pairs them up position-by-position -- one point per row of
+    `dataframe` -- rather than interpolating onto their cross product.
+
+    Parameters:
+        dataset (xarray.Dataset): Must have `longitude`/`latitude`
+            coordinates, e.g. an ERA5 dataset from `open_dataset`.
+        dataframe (pd.DataFrame): Must have `longitude`/`latitude` columns,
+            in plain WGS84 degrees -- one row per point to interpolate onto
+            (e.g. `analysis_df`'s stations or `analysis_grid`'s cell
+            centroids).
+        dimname (str): Name for the new dimension pairing `dataframe`'s rows
+            to `dataset`'s interpolated points, e.g. "station" or "cell".
+        method (str): Interpolation method passed to
+            `xarray.Dataset.interp`. Defaults to "linear".
+
+    Returns:
+        xarray.Dataset: `dataset` interpolated onto each row of `dataframe`,
+            indexed along `dimname` instead of the original longitude/
+            latitude grid.
+
+    Raises:
+        ValueError: If `dataframe` is missing `longitude`/`latitude`
+            columns, has no rows, has a null or out-of-range longitude/
+            latitude, or if any point falls outside `dataset`'s own
+            coordinate range -- interpolating there would otherwise
+            silently return NaN instead of raising.
+        RuntimeError: If `xarray.Dataset.interp` otherwise fails, e.g.
+            because `dataset` doesn't have `longitude`/`latitude`
+            coordinates at all.
+    """
+    required_cols = {"longitude", "latitude"}
+    missing = required_cols - set(dataframe.columns)
+    if missing:
+        raise ValueError(f"dataframe is missing required column(s): {sorted(missing)}")
+    if dataframe.empty:
+        raise ValueError("dataframe has no rows -- nothing to interpolate onto.")
+
+    bad_coords = (
+        dataframe["longitude"].isna()
+        | dataframe["latitude"].isna()
+        | ~dataframe["longitude"].between(-180, 180)
+        | ~dataframe["latitude"].between(-90, 90)
+    )
+    if bad_coords.any():
+        raise ValueError(
+            f"{int(bad_coords.sum())} row(s) have a missing or out-of-range "
+            "longitude/latitude."
+        )
+
+    lon_min, lon_max = float(dataset.longitude.min()), float(dataset.longitude.max())
+    lat_min, lat_max = float(dataset.latitude.min()), float(dataset.latitude.max())
+    out_of_bounds = ~dataframe["longitude"].between(lon_min, lon_max) | ~dataframe[
+        "latitude"
+    ].between(lat_min, lat_max)
+    if out_of_bounds.any():
+        raise ValueError(
+            f"{int(out_of_bounds.sum())} row(s) fall outside dataset's coordinate "
+            f"range (longitude [{lon_min}, {lon_max}], latitude [{lat_min}, "
+            f"{lat_max}]) -- interpolating there would silently return NaN."
+        )
+
+    try:
+        return dataset.interp(
+            longitude=xr.DataArray(dataframe.longitude, dims=dimname),
+            latitude=xr.DataArray(dataframe.latitude, dims=dimname),
+            method=method,
+        )
+    except (KeyError, ValueError) as exc:
+        raise RuntimeError(f"Failed to interpolate dataset onto dataframe: {exc}") from exc
