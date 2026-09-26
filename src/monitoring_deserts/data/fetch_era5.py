@@ -406,11 +406,18 @@ def cleanup_dataset(dataset):
 
     ERA5 datasets come back with cryptic short variable names (`t2m`, `tp`,
     ...) and a `valid_time`/`time` coordinate. This renames the variables to
-    the project's own descriptive names, and adds a `month` coordinate as a
-    monthly `pandas.Period` (e.g. "2026-05", not a full date) so this
-    dataset lines up with `gtruth_df`/`satellite_df`/`analysis_df`'s own
-    `month` columns, which use the same `.dt.to_period("M")` convention
-    (notebooks 02/03), for a later merge.
+    the project's own descriptive names, and swaps in a `month` dimension
+    (a plain `datetime64`, one value per original timestep) in place of
+    `valid_time`/`time`.
+
+    `month` is deliberately kept as `datetime64` here, not converted to a
+    `pandas.Period` (the format `gtruth_df`/`satellite_df`/`analysis_df` use
+    for their own `month` columns, via `.dt.to_period("M")` in notebooks
+    02/03) -- `Period` is a pandas-only extension dtype that NetCDF's CF
+    encoder can't serialize at all (`to_netcdf` raises `TypeError: Cannot
+    interpret 'period[M]' as a data type`). Do the `.dt.to_period("M")`
+    conversion downstream, after `.to_dataframe()`, the same way notebook 03
+    does for `satellite_df` -- once this leaves `xarray` for good.
 
     Parameters:
         dataset (xarray.Dataset): An ERA5 dataset, e.g. from `open_dataset`
@@ -421,8 +428,9 @@ def cleanup_dataset(dataset):
     Returns:
         xarray.Dataset: `dataset` with variables renamed to
             `total_precipitation`, `temperature`, `dew_point`, `u_wind`,
-            `v_wind`, `boundary_layer_height`, `surface_pressure`, plus a
-            new `month` coordinate.
+            `v_wind`, `boundary_layer_height`, `surface_pressure`, indexed
+            by a new `month` dimension (`datetime64`) in place of
+            `valid_time`/`time`.
 
     Raises:
         ValueError: If `dataset` is missing any of the expected raw
@@ -454,8 +462,9 @@ def cleanup_dataset(dataset):
         raise ValueError("dataset has neither a 'valid_time' nor a 'time' coordinate.")
 
     ds = dataset.rename(new_names)
-    month_index = pd.to_datetime(ds[time_coord].values).to_period("M")
-    ds = ds.assign_coords(month=(time_coord, month_index))
+    month_values = pd.to_datetime(ds[time_coord].values)
+    ds = ds.assign_coords(month=(time_coord, month_values))
+    ds = ds.swap_dims({time_coord: "month"})
     return ds
 
 
