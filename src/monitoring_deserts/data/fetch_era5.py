@@ -49,11 +49,16 @@ def build_year_month_groups(day_start, day_end):
     requesting months CDS hasn't published yet, which fails the entire job
     rather than just those months -- see `pull_era5`'s docstring).
 
+    `day_end`'s own calendar month is excluded, matching `build_month_windows`'s
+    (`fetch_earthengine.py`) exclusive-of-`DAY_END` convention -- the two
+    functions are meant to be called with the same `DAY_START`/`DAY_END`
+    pair and produce data covering the same set of months.
+
     Parameters:
         day_start (str | pd.Timestamp | datetime.datetime): Start of the date
             range. Its calendar month is included in full.
         day_end (str | pd.Timestamp | datetime.datetime): End of the date
-            range. Its calendar month is included in full.
+            range. Its calendar month is excluded.
 
     Returns:
         list[tuple[int, list[int]]]: One (year, months) pair per calendar
@@ -78,8 +83,10 @@ def build_year_month_groups(day_start, day_end):
     if start_ts > end_ts:
         raise ValueError(f"day_start ({start_ts}) must not be after day_end ({end_ts}).")
 
+    periods = pd.period_range(start_ts, end_ts, freq="M")[:-1]
+
     groups = {}
-    for period in pd.period_range(start_ts, end_ts, freq="M"):
+    for period in periods:
         groups.setdefault(period.year, []).append(period.month)
 
     return [(year, sorted(groups[year])) for year in sorted(groups)]
