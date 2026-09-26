@@ -1,0 +1,20 @@
+station_buffer_radius: 2000
+reducer_scale_m: 1000
+image_collections:
+  no2: COPERNICUS/S5P/OFFL/L3_NO2:tropospheric_NO2_column_number_density
+  aai: COPERNICUS/S5P/OFFL/L3_AER_AI:absorbing_aerosol_index
+units:
+  no2: mol/m2
+  aai: dimensionless
+n_stations: 344
+n_months: 16
+n_data_points: 5504
+missing_no2: 12
+missing_aai: 0
+missing_no2_info:
+  worst_station_id: '3409455'
+  worst_station_count: 2
+  worst_station_pct: 12.5%
+  worst_month: '2025-07-01'
+  worst_month_count: 6
+  worst_month_pct: 1.7%
