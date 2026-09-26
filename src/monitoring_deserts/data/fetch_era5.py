@@ -399,3 +399,65 @@ def interpolate(dataset, dataframe, dimname, method="linear"):
         )
     except (KeyError, ValueError) as exc:
         raise RuntimeError(f"Failed to interpolate dataset onto dataframe: {exc}") from exc
+
+
+def cleanup_dataset(dataset):
+    """Rename ERA5's raw variable codes and add a `month` coordinate for downstream merges.
+
+    ERA5 datasets come back with cryptic short variable names (`t2m`, `tp`,
+    ...) and a `valid_time`/`time` coordinate. This renames the variables to
+    the project's own descriptive names, and adds a `month` coordinate as a
+    monthly `pandas.Period` (e.g. "2026-05", not a full date) so this
+    dataset lines up with `gtruth_df`/`satellite_df`/`analysis_df`'s own
+    `month` columns, which use the same `.dt.to_period("M")` convention
+    (notebooks 02/03), for a later merge.
+
+    Parameters:
+        dataset (xarray.Dataset): An ERA5 dataset, e.g. from `open_dataset`
+            or `concat_datasets`, with the raw ERA5 short variable names
+            still in place (`tp`, `t2m`, `d2m`, `u10`, `v10`, `blh`, `sp`)
+            and a `valid_time` or `time` coordinate.
+
+    Returns:
+        xarray.Dataset: `dataset` with variables renamed to
+            `total_precipitation`, `temperature`, `dew_point`, `u_wind`,
+            `v_wind`, `boundary_layer_height`, `surface_pressure`, plus a
+            new `month` coordinate.
+
+    Raises:
+        ValueError: If `dataset` is missing any of the expected raw
+            variable names, or has neither a `valid_time` nor a `time`
+            coordinate.
+    """
+    new_names = {
+        "tp": "total_precipitation",
+        "t2m": "temperature",
+        "d2m": "dew_point",
+        "u10": "u_wind",
+        "v10": "v_wind",
+        "blh": "boundary_layer_height",
+        "sp": "surface_pressure",
+    }
+
+    missing = set(new_names) - set(dataset.data_vars)
+    if missing:
+        raise ValueError(
+            f"dataset is missing expected variable(s): {sorted(missing)} -- "
+            f"has {sorted(dataset.data_vars)}."
+        )
+
+    if "valid_time" in dataset.coords:
+        time_coord = "valid_time"
+    elif "time" in dataset.coords:
+        time_coord = "time"
+    else:
+        raise ValueError("dataset has neither a 'valid_time' nor a 'time' coordinate.")
+
+    ds = dataset.rename(new_names)
+    month_index = pd.to_datetime(ds[time_coord].values).to_period("M")
+    ds = ds.assign_coords(month=(time_coord, month_index))
+    return ds
+
+
+
+
