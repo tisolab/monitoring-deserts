@@ -1,0 +1,35 @@
+worldpop:
+  year: 2020
+  resolution: 1km
+  countries:
+  - IND
+  - PAK
+  - BGD
+  - NPL
+  - LKA
+  mosaic_total: 1800289280
+  gridded_total: 1800289152
+  n_cells_with_population: 155090
+  n_stations_without_population: 0
+rwi:
+  files:
+  - bgd_relative_wealth_index.csv
+  - ind_pak_relative_wealth_index.csv
+  - lka_relative_wealth_index.csv
+  - npl_relative_wealth_index.csv
+  n_points: 646933
+  max_distance_km: 5.0
+  n_stations_without_rwi: 0
+  n_cells_with_rwi: 137342
+viirs:
+  collection: NOAA/VIIRS/DNB/ANNUAL_V22
+  band: average
+  year: 2025
+  station_buffer_radius: 2000
+  reducer_scale_m: 500
+  grid_method: mean of source pixels per cell, tiled getDownloadURL
+  n_stations_without_viirs: 0
+  n_cells_without_viirs: 0
+n_stations: 344
+n_data_points: 5504
+n_grid_cells: 434940
