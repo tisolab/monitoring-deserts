@@ -2,9 +2,9 @@
 
 `build_worldpop_url` builds the download URL for one country's population-count
 GeoTIFF, `pull_worldpop` downloads one such file, and `pull_worldpop_countries`
-does so for a list of countries. Downloading is all this module does --
-mosaicking the per-country rasters and resampling them onto the analysis grid
-happen downstream, in the notebook.
+does so for a list of countries. `mosaic_rasters` then merges the per-country
+files into one region-wide raster. Resampling that raster onto the analysis grid
+happens downstream, in the notebook.
 
 Two resolutions are supported, since the analysis grid (0.05 degrees, roughly
 5-6 km) is far coarser than WorldPop's native 100 m: the full-resolution
@@ -14,7 +14,11 @@ and moves the same population totals onto the grid.
 
 from pathlib import Path
 
+import rasterio.errors
 import requests
+import rioxarray
+from rioxarray.exceptions import NoDataInBounds, RioXarrayError
+from rioxarray.merge import merge_arrays
 from tqdm.auto import tqdm
 
 WORLDPOP_BASE_URL = "https://data.worldpop.org/GIS/Population"
@@ -137,7 +141,9 @@ def pull_worldpop(
                 unit_divisor=1024,
                 disable=not progress,
             ) as bar:
-                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                # Small chunks: iter_content blocks until a full chunk arrives, so a large
+                # chunk on this slow server leaves the bar frozen at 0% between updates
+                for chunk in response.iter_content(chunk_size=64 * 1024):
                     f.write(chunk)
                     bar.update(len(chunk))
     except requests.RequestException as exc:
@@ -215,3 +221,83 @@ def pull_worldpop_countries(
             ) from exc
 
     return paths
+
+
+def mosaic_rasters(paths, bbox=None):
+    """Merge per-country WorldPop rasters into one region-wide population raster.
+
+    Each file is opened with WorldPop's nodata value masked to NaN, optionally
+    clipped to `bbox` *before* merging, then merged. Clipping first matters
+    for memory: opened lazily, only the part inside `bbox` is ever read, which
+    keeps a 100 m mosaic (billions of cells for a region this size) tractable.
+    The 1 km product is small enough not to need it, but clipping does no harm.
+
+    Parameters:
+        paths (dict | list[str | Path]): Raster files to merge, e.g. the
+            dict returned by `pull_worldpop_countries` (its values are used).
+        bbox (tuple | None): `(min_lon, min_lat, max_lon, max_lat)` in
+            degrees, this project's usual bounding-box order (unlike
+            `fetch_era5`'s N/W/S/E). Defaults to None (no clipping).
+
+    Returns:
+        xarray.DataArray: Population per cell on a single `y`/`x` grid, named
+            "population", NaN where no country has data. Units are people per
+            cell of the source resolution -- still to be summed (not
+            averaged) if resampled to a coarser grid.
+
+    Raises:
+        ValueError: If `paths` is empty, `bbox` is malformed, or the rasters
+            don't all share one CRS.
+        FileNotFoundError: If any file in `paths` doesn't exist.
+        RuntimeError: If a file can't be read, has no data inside `bbox`, or
+            the merge itself fails.
+    """
+    if isinstance(paths, dict):
+        paths = list(paths.values())
+    paths = [Path(p) for p in paths]
+    if not paths:
+        raise ValueError("paths is empty -- nothing to mosaic.")
+
+    missing = [str(p) for p in paths if not p.exists()]
+    if missing:
+        raise FileNotFoundError(f"Raster file(s) not found: {missing}")
+
+    if bbox is not None:
+        if len(bbox) != 4:
+            raise ValueError(
+                f"bbox must have exactly 4 elements (min_lon, min_lat, max_lon, "
+                f"max_lat), got {bbox!r}"
+            )
+        min_lon, min_lat, max_lon, max_lat = bbox
+        if min_lon >= max_lon or min_lat >= max_lat:
+            raise ValueError(
+                f"bbox must have min < max on both axes, got {bbox!r}"
+            )
+
+    rasters = []
+    for path in paths:
+        try:
+            raster = rioxarray.open_rasterio(path, masked=True).squeeze("band", drop=True)
+            if bbox is not None:
+                raster = raster.rio.clip_box(
+                    minx=min_lon, miny=min_lat, maxx=max_lon, maxy=max_lat
+                )
+        except NoDataInBounds as exc:
+            raise RuntimeError(f"{path.name} has no data inside bbox {bbox!r}") from exc
+        except (rasterio.errors.RasterioError, RioXarrayError, OSError) as exc:
+            raise RuntimeError(f"Failed to read raster {path}: {exc}") from exc
+        rasters.append(raster)
+
+    crs_found = {str(r.rio.crs) for r in rasters}
+    if len(crs_found) > 1:
+        raise ValueError(
+            f"Rasters don't share one CRS, can't mosaic them: {sorted(crs_found)}"
+        )
+
+    try:
+        merged = merge_arrays(rasters)
+    except (rasterio.errors.RasterioError, RioXarrayError, ValueError) as exc:
+        raise RuntimeError(f"Failed to merge rasters: {exc}") from exc
+
+    merged.name = "population"
+    return merged
