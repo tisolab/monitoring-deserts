@@ -1,0 +1,36 @@
+columns_checked_for_nan:
+- pm25
+- no2
+- aai
+- total_precipitation
+- temperature
+- dew_point
+- u_wind
+- v_wind
+- boundary_layer_height
+- surface_pressure
+- relative_humidity
+- wind_magnitude
+n_dropped_rows: 282
+dropped_rows_by_column:
+  pm25: 270
+  no2: 12
+target_transform: log1p
+target_transform_note: log(x) also computed for comparison; log1p kept for now to
+  avoid dealing with a handful of very low PM2.5 readings that may be measurement-floor
+  artifacts
+log1p_pm25_correlations:
+  aai: 0.391
+  no2: 0.373
+  surface_pressure: 0.21
+  boundary_layer_height: -0.216
+  u_wind: -0.234
+  relative_humidity: -0.246
+  wind_magnitude: -0.297
+  temperature: -0.395
+  v_wind: -0.407
+  total_precipitation: -0.474
+  dew_point: -0.514
+n_stations: 343
+n_months: 16
+n_data_points: 5222
