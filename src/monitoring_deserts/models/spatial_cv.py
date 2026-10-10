@@ -3,11 +3,13 @@
 Scoring a PM2.5 model on randomly held-out rows overstates how well it predicts where
 there is no station, because a held-out station almost always has a training station a
 few kilometres away. This module builds folds that hold out whole regions instead. It
-handles three things:
+handles four things:
 
 1. clustering the stations into compact spatial blocks (KMeans on longitude/latitude);
 2. giving every row of the station-month table the block of its station;
-3. packing whole blocks into folds with scikit-learn's `GroupKFold`.
+3. packing whole blocks into folds with scikit-learn's `GroupKFold`;
+4. scoring a model over any set of folds, spatial or random, collecting per-fold metrics
+   and out-of-fold predictions.
 
 Blocks are fit on unique stations, not on station-month rows, so a station with a long
 record doesn't pull the clusters toward itself, and every month of a station lands in
@@ -18,7 +20,10 @@ station network, is in the project plan (Phase H and Appendix D.8).
 """
 
 import numpy as np
+import pandas as pd
+from sklearn.base import clone
 from sklearn.cluster import KMeans
+from sklearn.metrics import mean_absolute_error, r2_score, root_mean_squared_error
 from sklearn.model_selection import GroupKFold
 
 BLOCK_COLUMN = "spatial_block_id"
@@ -181,3 +186,137 @@ def group_k_fold(df, n_folds=8):
     gkf = GroupKFold(n_splits=n_folds)
     # df only supplies the row count; the folds are computed from the blocks alone
     return list(gkf.split(df, groups=df[BLOCK_COLUMN]))
+
+
+def run_cross_validation(model, X, y, splits, groups=None, inverse_transform=np.expm1):
+    """Score a model over a set of folds: per-fold metrics and out-of-fold predictions.
+
+    For each `(train_idx, test_idx)` pair in `splits`, fits a fresh clone of `model` on
+    the training rows, predicts the held-out rows and scores them. Any split source in
+    the `GroupKFold.split` format works (the spatial folds from `group_k_fold`, a random
+    `KFold`, ...), so the schemes can be compared with exactly the same model and metrics.
+
+    The target is expected to be log-transformed. Predictions and actual values are
+    passed through `inverse_transform` before scoring, so the metrics and the
+    out-of-fold predictions are in the original units (ug/m3 for PM2.5). The default,
+    `np.expm1`, undoes `log1p`; for a `log` target pass `np.exp`, and pass `None` to
+    score on the model's own scale.
+
+    Parameters:
+        model: An unfitted scikit-learn-style estimator, e.g. a `RandomForestRegressor`.
+            It is never fitted itself: each fold fits a clone, so the folds are
+            independent.
+        X (pd.DataFrame): Features, one row per station-month.
+        y (pd.Series): Log-transformed target for the same rows (same index as `X`).
+        splits (iterable): `(train_idx, test_idx)` pairs of integer row *positions* (not
+            index labels), e.g. from `group_k_fold` or `KFold.split`. A list or a
+            generator; it is read once.
+        groups (array-like | None): Optional label per row, e.g. `spatial_block_id`. If
+            given, it is returned for the held-out rows, to colour a predicted-versus-
+            observed plot by block. Defaults to None.
+        inverse_transform (callable | None): Applied to predictions and actual values
+            before scoring. Defaults to `np.expm1`.
+
+    Returns:
+        tuple: `(metrics, oof_prediction, oof_groups)`.
+            metrics (pd.DataFrame): One row per fold, with columns `fold` (counting from
+                0), `n_test`, `r2`, `rmse` and `mae`.
+            oof_prediction (np.ndarray): Out-of-fold predictions, one per row of `y` in
+                the same order, after `inverse_transform`. `NaN` for a row that is in no
+                test fold.
+            oof_groups (pd.Series | None): `groups` as a Series indexed like `y` (integer
+                labels stay integers when every row was tested), or None if `groups` was
+                not given.
+
+    Raises:
+        ValueError: If `X` isn't a DataFrame or `y` a Series, they are empty, differ in
+            length or index, or `y` has nulls; `groups` doesn't have one label per row;
+            `inverse_transform` isn't callable or None; `splits` is empty or a split
+            isn't a pair of non-empty integer arrays, has a test or train position out of
+            range, or has a row in both train and test.
+        RuntimeError: If fitting, predicting or scoring fails on a fold. The message names
+            the fold (counting from 0) and the original exception is chained.
+    """
+    if not isinstance(X, pd.DataFrame):
+        raise ValueError(f"X must be a pandas DataFrame, got {type(X).__name__}")
+    if not isinstance(y, pd.Series):
+        raise ValueError(f"y must be a pandas Series, got {type(y).__name__}")
+    if len(X) == 0:
+        raise ValueError("X has no rows -- nothing to cross-validate.")
+    if len(X) != len(y):
+        raise ValueError(f"X has {len(X)} rows but y has {len(y)}.")
+    if not X.index.equals(y.index):
+        raise ValueError("X and y have different indexes; pass rows that line up.")
+    if y.isna().any():
+        raise ValueError(f"y has {int(y.isna().sum())} null value(s); drop those rows first.")
+    if inverse_transform is not None and not callable(inverse_transform):
+        raise ValueError("inverse_transform must be a callable or None.")
+
+    n_rows = len(y)
+    group_labels = None
+    if groups is not None:
+        group_labels = np.asarray(groups)
+        if group_labels.ndim != 1 or len(group_labels) != n_rows:
+            raise ValueError(
+                f"groups must be 1-D with one label per row ({n_rows}), "
+                f"got shape {group_labels.shape}"
+            )
+
+    splits = list(splits)
+    if not splits:
+        raise ValueError("splits is empty -- nothing to cross-validate.")
+    checked_splits = []
+    for fold_n, split in enumerate(splits):
+        try:
+            train_idx, test_idx = split
+        except (TypeError, ValueError):
+            raise ValueError(f"split {fold_n} isn't a (train_idx, test_idx) pair") from None
+        train_idx, test_idx = np.asarray(train_idx), np.asarray(test_idx)
+        for name, idx in (("train", train_idx), ("test", test_idx)):
+            if idx.ndim != 1 or idx.size == 0 or idx.dtype.kind not in "iu":
+                raise ValueError(
+                    f"fold {fold_n}: {name}_idx must be a non-empty 1-D array of integer positions"
+                )
+            if idx.min() < 0 or idx.max() >= n_rows:
+                raise ValueError(
+                    f"fold {fold_n}: {name}_idx has positions outside 0..{n_rows - 1}"
+                )
+        n_shared = np.intersect1d(train_idx, test_idx).size
+        if n_shared:
+            raise ValueError(
+                f"fold {fold_n}: {n_shared} row(s) are in both the training and the test set"
+            )
+        checked_splits.append((train_idx, test_idx))
+
+    n_folds = len(checked_splits)
+    fold_results = []
+    oof_prediction = np.full(n_rows, np.nan)
+    oof_group_values = None if group_labels is None else np.full(n_rows, np.nan, dtype=object)
+
+    for fold_n, (train_idx, test_idx) in enumerate(checked_splits):
+        try:
+            estimator = clone(model)
+            estimator.fit(X.iloc[train_idx], y.iloc[train_idx])
+            pred = estimator.predict(X.iloc[test_idx])
+            actual = y.iloc[test_idx].to_numpy()
+            if inverse_transform is not None:
+                pred, actual = inverse_transform(pred), inverse_transform(actual)
+            scores = {
+                "r2": r2_score(actual, pred),
+                "rmse": root_mean_squared_error(actual, pred),
+                "mae": mean_absolute_error(actual, pred),
+            }
+        except Exception as exc:
+            raise RuntimeError(
+                f"Cross-validation failed on fold {fold_n} (of {n_folds}, counting from 0): {exc}"
+            ) from exc
+
+        fold_results.append({"fold": fold_n, "n_test": len(test_idx), **scores})
+        oof_prediction[test_idx] = pred
+        if oof_group_values is not None:
+            oof_group_values[test_idx] = group_labels[test_idx]
+
+    oof_groups = None
+    if oof_group_values is not None:
+        oof_groups = pd.Series(oof_group_values, index=y.index).infer_objects()
+    return pd.DataFrame(fold_results), oof_prediction, oof_groups
