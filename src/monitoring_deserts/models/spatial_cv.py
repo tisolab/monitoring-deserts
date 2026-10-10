@@ -3,13 +3,16 @@
 Scoring a PM2.5 model on randomly held-out rows overstates how well it predicts where
 there is no station, because a held-out station almost always has a training station a
 few kilometres away. This module builds folds that hold out whole regions instead. It
-handles four things:
+handles five things:
 
 1. clustering the stations into compact spatial blocks (KMeans on longitude/latitude);
 2. giving every row of the station-month table the block of its station;
 3. packing whole blocks into folds with scikit-learn's `GroupKFold`;
 4. scoring a model over any set of folds, spatial or random, collecting per-fold metrics
-   and out-of-fold predictions.
+   and out-of-fold predictions;
+5. checking how realistic a fold scheme is: how far its held-out stations are from the
+   nearest training station, against how far the cells to be predicted are from the
+   nearest station (the distance check).
 
 Blocks are fit on unique stations, not on station-month rows, so a station with a long
 record doesn't pull the clusters toward itself, and every month of a station lands in
@@ -21,12 +24,14 @@ station network, is in the project plan (Phase H and Appendix D.8).
 
 import numpy as np
 import pandas as pd
+from scipy.spatial import cKDTree
 from sklearn.base import clone
 from sklearn.cluster import KMeans
 from sklearn.metrics import mean_absolute_error, r2_score, root_mean_squared_error
 from sklearn.model_selection import GroupKFold
 
 BLOCK_COLUMN = "spatial_block_id"
+EARTH_RADIUS_KM = 6371.0088  # mean radius; great-circle distances treat the Earth as a sphere
 
 
 def _is_positive_int(value):
@@ -300,3 +305,183 @@ def run_cross_validation(model, X, y, splits, inverse_transform=np.expm1):
         oof_prediction[test_idx] = pred
 
     return pd.DataFrame(fold_results), oof_prediction
+
+
+def _to_unit_sphere(longitude, latitude):
+    """Longitude/latitude in degrees -> 3-D points on the unit sphere."""
+    lon, lat = np.radians(longitude), np.radians(latitude)
+    return np.column_stack([np.cos(lat) * np.cos(lon), np.cos(lat) * np.sin(lon), np.sin(lat)])
+
+
+def _check_coordinates(longitude, latitude, label):
+    """Return longitude and latitude as float arrays, after checking they are usable points."""
+    lon = np.asarray(longitude, dtype=float)
+    lat = np.asarray(latitude, dtype=float)
+    if lon.ndim != 1 or lon.shape != lat.shape or lon.size == 0:
+        raise ValueError(
+            f"{label} longitude and latitude must be non-empty 1-D arrays of the same length."
+        )
+    if np.isnan(lon).any() or np.isnan(lat).any():
+        raise ValueError(f"{label} coordinates contain null values.")
+    if (np.abs(lon) > 180).any() or (np.abs(lat) > 90).any():
+        raise ValueError(
+            f"{label} coordinates are out of range (longitude within 180, latitude within 90)."
+        )
+    return lon, lat
+
+
+def nearest_distance_km(from_longitude, from_latitude, to_longitude, to_latitude):
+    """Great-circle distance from each "from" point to its nearest "to" point, in km.
+
+    Points are converted to the unit sphere, where straight-line distance maps exactly to
+    great-circle distance, and the nearest neighbour is found with a KD-tree. That avoids
+    working in raw degrees (a degree of longitude shrinks with latitude) and, unlike an
+    equal-area projection, keeps distances true. The Earth is treated as a sphere
+    (`EARTH_RADIUS_KM`), which is typically within about 0.5% of ellipsoidal distances.
+
+    Parameters:
+        from_longitude, from_latitude (array-like): Coordinates in degrees of the points to
+            measure from, e.g. grid-cell centres or held-out stations.
+        to_longitude, to_latitude (array-like): Coordinates in degrees of the points to
+            measure to, e.g. the stations.
+
+    Returns:
+        numpy.ndarray: One distance in km per "from" point, in the same order.
+
+    Raises:
+        ValueError: If either set of coordinates is empty, not 1-D, of mismatched length,
+            contains nulls, or has a longitude beyond 180 or a latitude beyond 90 degrees.
+    """
+    from_lon, from_lat = _check_coordinates(from_longitude, from_latitude, "from")
+    to_lon, to_lat = _check_coordinates(to_longitude, to_latitude, "to")
+
+    chord, _ = cKDTree(_to_unit_sphere(to_lon, to_lat)).query(_to_unit_sphere(from_lon, from_lat))
+    return 2 * EARTH_RADIUS_KM * np.arcsin(np.minimum(chord, 2) / 2)  # chord length -> arc length
+
+
+def heldout_distances_km(df, splits):
+    """Distance from each held-out station to the nearest training station, pooled over folds.
+
+    For each `(train_idx, test_idx)` pair, takes the distinct stations among the training
+    rows and among the test rows (a station has many monthly rows) and measures from every
+    held-out station to the closest training station. This is what a fold scheme rehearses:
+    how far the model's test locations are from the stations it learned from, to compare
+    with how far the cells to be predicted are from the nearest station.
+
+    With a random split over rows, a held-out station's other months are usually in the
+    training set, so its own location is a training location and its distance is 0.
+
+    Parameters:
+        df (pd.DataFrame): Station-month table with `station_id`, `longitude` and `latitude`
+            columns. Each station must have the same coordinates in every row.
+        splits (iterable): `(train_idx, test_idx)` pairs of integer row positions into `df`
+            (not index labels), e.g. from `group_k_fold` or `KFold.split`. A list or a
+            generator; it is read once.
+
+    Returns:
+        numpy.ndarray: One distance in km per held-out station per fold, the folds
+            concatenated in order.
+
+    Raises:
+        ValueError: If a required column is missing or `df` is empty; `station_id`,
+            longitude or latitude has nulls; a station has more than one coordinate pair;
+            `splits` is empty, or a split isn't a pair of non-empty integer arrays, or has
+            a position out of range. Out-of-range coordinates are reported by
+            `nearest_distance_km`.
+    """
+    missing = {"station_id", "longitude", "latitude"} - set(df.columns)
+    if missing:
+        raise ValueError(f"df is missing required column(s): {sorted(missing)}")
+    if df.empty:
+        raise ValueError("df has no rows -- nothing to measure.")
+    null_columns = [c for c in ("station_id", "longitude", "latitude") if df[c].isna().any()]
+    if null_columns:
+        raise ValueError(f"df has null values in column(s): {null_columns}")
+    pairs_per_station = (
+        df.drop_duplicates(["station_id", "longitude", "latitude"]).groupby("station_id").size()
+    )
+    moving = pairs_per_station[pairs_per_station > 1].index.tolist()
+    if moving:
+        shown = moving[:5] + (["..."] if len(moving) > 5 else [])
+        raise ValueError(
+            f"{len(moving)} station(s) have more than one coordinate pair: {shown}"
+        )
+
+    stations = df.drop_duplicates("station_id").set_index("station_id")[["longitude", "latitude"]]
+    row_station_id = df["station_id"].to_numpy()
+    n_rows = len(df)
+
+    splits = list(splits)
+    if not splits:
+        raise ValueError("splits is empty -- nothing to measure.")
+
+    pooled = []
+    for fold_n, split in enumerate(splits):
+        try:
+            train_idx, test_idx = split
+        except (TypeError, ValueError):
+            raise ValueError(f"split {fold_n} isn't a (train_idx, test_idx) pair") from None
+        fold_stations = {}
+        for name, idx in (("train", train_idx), ("test", test_idx)):
+            idx = np.asarray(idx)
+            if idx.ndim != 1 or idx.size == 0 or idx.dtype.kind not in "iu":
+                raise ValueError(
+                    f"fold {fold_n}: {name}_idx must be a non-empty 1-D array of integer positions"
+                )
+            if idx.min() < 0 or idx.max() >= n_rows:
+                raise ValueError(
+                    f"fold {fold_n}: {name}_idx has positions outside 0..{n_rows - 1}"
+                )
+            fold_stations[name] = stations.loc[np.unique(row_station_id[idx])]
+        train, test = fold_stations["train"], fold_stations["test"]
+        pooled.append(
+            nearest_distance_km(
+                test["longitude"], test["latitude"], train["longitude"], train["latitude"]
+            )
+        )
+    return np.concatenate(pooled)
+
+
+def summarize_distances(distances_km, percentiles=(10, 25, 50, 75, 90)):
+    """Summarise sets of distances by their percentiles, one row per set.
+
+    Meant for putting the outputs of `nearest_distance_km` and `heldout_distances_km` side by
+    side: the distances from the cells to be predicted to the nearest station against those
+    from each fold scheme's held-out stations to the nearest training station.
+
+    Parameters:
+        distances_km (dict[str, array-like]): Label -> distances in km, e.g.
+            `{"prediction cells": reality_km, "spatial folds": heldout_distances_km(df, splits)}`.
+        percentiles (sequence of float): Percentiles to report, each between 0 and 100.
+            Defaults to 10, 25, 50, 75 and 90.
+
+    Returns:
+        pd.DataFrame: One row per label, one column per percentile (named like
+            "50th percentile (km)") and a final "closest (km)" column holding the smallest
+            distance in the set. A dead zone (buffer) around the test stations only removes
+            training stations if it is larger than the closest distance of a fold scheme.
+
+    Raises:
+        ValueError: If `distances_km` isn't a non-empty dict, `percentiles` is empty or has a
+            value outside 0-100, or a set of distances is empty, not 1-D, negative or has
+            nulls.
+    """
+    if not isinstance(distances_km, dict) or not distances_km:
+        raise ValueError("distances_km must be a non-empty dict of label -> distances.")
+    levels = np.asarray(percentiles, dtype=float)
+    if levels.ndim != 1 or levels.size == 0 or (levels < 0).any() or (levels > 100).any():
+        raise ValueError("percentiles must be a non-empty sequence of numbers between 0 and 100.")
+
+    summary, closest = {}, []
+    for label, values in distances_km.items():
+        km = np.asarray(values, dtype=float)
+        if km.ndim != 1 or km.size == 0:
+            raise ValueError(f"'{label}': distances must be a non-empty 1-D array.")
+        if np.isnan(km).any() or (km < 0).any():
+            raise ValueError(f"'{label}': distances must be non-negative numbers without nulls.")
+        summary[label] = np.percentile(km, levels)
+        closest.append(km.min())
+
+    table = pd.DataFrame(summary, index=[f"{p:g}th percentile (km)" for p in levels]).T
+    table["closest (km)"] = closest
+    return table
