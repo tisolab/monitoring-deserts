@@ -188,7 +188,7 @@ def group_k_fold(df, n_folds=8):
     return list(gkf.split(df, groups=df[BLOCK_COLUMN]))
 
 
-def run_cross_validation(model, X, y, splits, groups=None, inverse_transform=np.expm1):
+def run_cross_validation(model, X, y, splits, inverse_transform=np.expm1):
     """Score a model over a set of folds: per-fold metrics and out-of-fold predictions.
 
     For each `(train_idx, test_idx)` pair in `splits`, fits a fresh clone of `model` on
@@ -211,27 +211,21 @@ def run_cross_validation(model, X, y, splits, groups=None, inverse_transform=np.
         splits (iterable): `(train_idx, test_idx)` pairs of integer row *positions* (not
             index labels), e.g. from `group_k_fold` or `KFold.split`. A list or a
             generator; it is read once.
-        groups (array-like | None): Optional label per row, e.g. `spatial_block_id`. If
-            given, it is returned for the held-out rows, to colour a predicted-versus-
-            observed plot by block. Defaults to None.
         inverse_transform (callable | None): Applied to predictions and actual values
             before scoring. Defaults to `np.expm1`.
 
     Returns:
-        tuple: `(metrics, oof_prediction, oof_groups)`.
+        tuple: `(metrics, oof_prediction)`.
             metrics (pd.DataFrame): One row per fold, with columns `fold` (counting from
                 0), `n_test`, `r2`, `rmse` and `mae`.
             oof_prediction (np.ndarray): Out-of-fold predictions, one per row of `y` in
                 the same order, after `inverse_transform`. `NaN` for a row that is in no
                 test fold.
-            oof_groups (pd.Series | None): `groups` as a Series indexed like `y` (integer
-                labels stay integers when every row was tested), or None if `groups` was
-                not given.
 
     Raises:
         ValueError: If `X` isn't a DataFrame or `y` a Series, they are empty, differ in
-            length or index, or `y` has nulls; `groups` doesn't have one label per row;
-            `inverse_transform` isn't callable or None; `splits` is empty or a split
+            length or index, or `y` has nulls; `inverse_transform` isn't callable or
+            None; `splits` is empty or a split
             isn't a pair of non-empty integer arrays, has a test or train position out of
             range, or has a row in both train and test.
         RuntimeError: If fitting, predicting or scoring fails on a fold. The message names
@@ -253,14 +247,6 @@ def run_cross_validation(model, X, y, splits, groups=None, inverse_transform=np.
         raise ValueError("inverse_transform must be a callable or None.")
 
     n_rows = len(y)
-    group_labels = None
-    if groups is not None:
-        group_labels = np.asarray(groups)
-        if group_labels.ndim != 1 or len(group_labels) != n_rows:
-            raise ValueError(
-                f"groups must be 1-D with one label per row ({n_rows}), "
-                f"got shape {group_labels.shape}"
-            )
 
     splits = list(splits)
     if not splits:
@@ -291,7 +277,6 @@ def run_cross_validation(model, X, y, splits, groups=None, inverse_transform=np.
     n_folds = len(checked_splits)
     fold_results = []
     oof_prediction = np.full(n_rows, np.nan)
-    oof_group_values = None if group_labels is None else np.full(n_rows, np.nan, dtype=object)
 
     for fold_n, (train_idx, test_idx) in enumerate(checked_splits):
         try:
@@ -313,10 +298,5 @@ def run_cross_validation(model, X, y, splits, groups=None, inverse_transform=np.
 
         fold_results.append({"fold": fold_n, "n_test": len(test_idx), **scores})
         oof_prediction[test_idx] = pred
-        if oof_group_values is not None:
-            oof_group_values[test_idx] = group_labels[test_idx]
 
-    oof_groups = None
-    if oof_group_values is not None:
-        oof_groups = pd.Series(oof_group_values, index=y.index).infer_objects()
-    return pd.DataFrame(fold_results), oof_prediction, oof_groups
+    return pd.DataFrame(fold_results), oof_prediction
