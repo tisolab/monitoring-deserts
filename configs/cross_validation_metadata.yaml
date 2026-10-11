@@ -1,0 +1,80 @@
+n_stations: 343
+n_data_points: 5222
+stations_per_block: 10
+n_init: 15
+random_state: 42
+n_blocks: 35
+n_folds: 8
+block_assignment_note: KMeans blocks depend on the row order of the station table;
+  reuse station_blocks_folds.parquet instead of re-clustering
+spatial_fold_test_rows:
+- 654
+- 640
+- 660
+- 656
+- 646
+- 638
+- 671
+- 657
+spatial_fold_test_stations:
+- 43
+- 42
+- 43
+- 42
+- 42
+- 43
+- 46
+- 42
+random_fold_test_rows:
+- 653
+- 653
+- 653
+- 653
+- 653
+- 653
+- 652
+- 652
+baseline_model: RandomForestRegressor(n_estimators=700, max_depth=6)
+baseline_features:
+- no2
+- aai
+- total_precipitation
+- temperature
+- dew_point
+- u_wind
+- v_wind
+- wind_magnitude
+- boundary_layer_height
+- surface_pressure
+baseline_target: log1p_pm25
+baseline_scores:
+  random_kfold:
+    r2: 0.6015
+    rmse: 20.044
+    mae: 12.5453
+  spatial_group_kfold:
+    r2: 0.24
+    rmse: 24.1486
+    mae: 15.8938
+distance_check_km:
+  prediction cells (reality):
+    10th percentile (km): 28.7
+    25th percentile (km): 51.0
+    50th percentile (km): 90.8
+    75th percentile (km): 190.4
+    90th percentile (km): 374.7
+    closest (km): 0.1
+  random folds (over rows):
+    10th percentile (km): 0.0
+    25th percentile (km): 0.0
+    50th percentile (km): 0.0
+    75th percentile (km): 0.0
+    90th percentile (km): 0.0
+    closest (km): 0.0
+  spatial folds (GroupKFold):
+    10th percentile (km): 90.9
+    25th percentile (km): 106.1
+    50th percentile (km): 138.8
+    75th percentile (km): 183.7
+    90th percentile (km): 230.8
+    closest (km): 46.5
