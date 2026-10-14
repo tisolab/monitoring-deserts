@@ -1,0 +1,338 @@
+n_stations: 343
+n_data_points: 5222
+n_folds: 8
+folds_and_blocks_from: configs/cross_validation_metadata.yaml, data/clean/cross_validation/station_blocks_folds.parquet
+target: log1p_pm25
+target_transform: log1p; predictions and metrics are back-transformed with np.expm1
+  (ug/m3)
+search_scoring: neg_root_mean_squared_error on the log1p scale, cv = the spatial folds
+random_forest:
+  features:
+  - no2
+  - aai
+  - total_precipitation
+  - temperature
+  - dew_point
+  - u_wind
+  - v_wind
+  - wind_magnitude
+  - boundary_layer_height
+  - surface_pressure
+  - relative_humidity
+  - sin_month
+  - cos_month
+  search_space:
+    n_estimators:
+    - 400
+    - 500
+    - 600
+    - 700
+    max_depth:
+    - 5
+    - 7
+    - 10
+    - 15
+    - 20
+    min_samples_leaf:
+    - 5
+    - 10
+    - 15
+    - 20
+    - 25
+    max_features:
+    - 0.2
+    - 0.5
+    - 0.7
+    - 0.9
+  n_iter: 20
+  best_params:
+    n_estimators: 400
+    min_samples_leaf: 10
+    max_features: 0.2
+    max_depth: 7
+  best_search_rmse_log1p: 0.4616408589985237
+xgboost:
+  features:
+  - no2
+  - aai
+  - total_precipitation
+  - temperature
+  - dew_point
+  - u_wind
+  - v_wind
+  - wind_magnitude
+  - boundary_layer_height
+  - surface_pressure
+  - relative_humidity
+  - month_of_year
+  search_space:
+    n_estimators:
+    - 100
+    - 200
+    - 300
+    - 400
+    - 500
+    - 600
+    - 700
+    - 800
+    - 900
+    - 1000
+    max_leaves:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    - 6
+    - 7
+    - 8
+    - 9
+    - 10
+    - 11
+    - 12
+    - 13
+    - 14
+    - 15
+    - 16
+    - 17
+    - 18
+    - 19
+    - 20
+    learning_rate:
+    - 0.01
+    - 0.05
+    - 0.1
+    - 0.15
+    subsample:
+    - 0.2
+    - 0.4
+    - 0.5
+    - 0.7
+    - 1.0
+  n_iter: 20
+  best_params:
+    subsample: 0.2
+    n_estimators: 300
+    max_leaves: 17
+    learning_rate: 0.01
+  best_search_rmse_log1p: 0.4665961943035073
+rf_vs_xgboost_paired_rmse:
+  n_folds: 8
+  mean_diff: -0.3222304829272604
+  std_diff: 0.3941406647943647
+  std_err: 0.13934976840873461
+  t_stat: -2.312386210661708
+  n_folds_a_better: 6
+  verdict: Random Forest clearly better
+  note: differences are random forest minus XGBoost; negative favours the random forest
+chosen_model: Random Forest
+headline_metrics_ugm3:
+  spatial_folds:
+    r2: 0.2677813002283317
+    rmse: 27.378982915961448
+    mae: 15.514011269294055
+  random_folds:
+    r2: 0.5982151743874111
+    rmse: 20.281200947016163
+    mae: 12.557073502042126
+per_fold_metrics_ugm3:
+  random_forest_spatial_folds:
+  - fold: 0
+    n_test: 654
+    r2: -0.1352292955917862
+    rmse: 59.537904497643915
+    mae: 39.64863163038005
+  - fold: 1
+    n_test: 640
+    r2: 0.3299408836777419
+    rmse: 16.999444920103524
+    mae: 9.917636743564469
+  - fold: 2
+    n_test: 660
+    r2: 0.3561872548088113
+    rmse: 20.093658408169045
+    mae: 14.092259089970335
+  - fold: 3
+    n_test: 656
+    r2: 0.27301531357522935
+    rmse: 17.455446191487006
+    mae: 12.97216828895876
+  - fold: 4
+    n_test: 646
+    r2: 0.3648938712851606
+    rmse: 17.45904210076869
+    mae: 11.370604477480319
+  - fold: 5
+    n_test: 638
+    r2: 0.43362747051471107
+    rmse: 19.590725138451376
+    mae: 11.36131903516146
+  - fold: 6
+    n_test: 671
+    r2: 0.11888789568094105
+    rmse: 23.311289759087735
+    mae: 14.225112713664002
+  - fold: 7
+    n_test: 657
+    r2: 0.5201378802752585
+    rmse: 14.517644484234873
+    mae: 10.330377749486345
+  xgboost_spatial_folds:
+  - fold: 0
+    n_test: 654
+    r2: -0.15403415111522634
+    rmse: 60.02899612471992
+    mae: 39.369878128611596
+  - fold: 1
+    n_test: 640
+    r2: 0.2781763249980168
+    rmse: 17.643865631326463
+    mae: 10.649554533636488
+  - fold: 2
+    n_test: 660
+    r2: 0.36658151676484463
+    rmse: 19.93079379912913
+    mae: 13.995493811493695
+  - fold: 3
+    n_test: 656
+    r2: 0.22528244167120126
+    rmse: 18.019387417742507
+    mae: 13.386414803520474
+  - fold: 4
+    n_test: 646
+    r2: 0.3041053645878654
+    rmse: 18.275488933638574
+    mae: 11.77873328611932
+  - fold: 5
+    n_test: 638
+    r2: 0.44829940037866467
+    rmse: 19.33531042643075
+    mae: 11.310636595912962
+  - fold: 6
+    n_test: 671
+    r2: 0.08630271625217478
+    rmse: 23.73842417676383
+    mae: 14.508523663852916
+  - fold: 7
+    n_test: 657
+    r2: 0.5166219274806836
+    rmse: 14.57073285361308
+    mae: 10.257358536003617
+  chosen_model_random_folds:
+  - fold: 0
+    n_test: 653
+    r2: 0.56551237605348
+    rmse: 23.86043843227735
+    mae: 13.536455428514024
+  - fold: 1
+    n_test: 653
+    r2: 0.6225093583097534
+    rmse: 20.05908510745249
+    mae: 13.08288782443446
+  - fold: 2
+    n_test: 653
+    r2: 0.6082341469169293
+    rmse: 18.593568072446317
+    mae: 11.719166018530416
+  - fold: 3
+    n_test: 653
+    r2: 0.6298036339899683
+    rmse: 18.636802938725626
+    mae: 12.261546902628648
+  - fold: 4
+    n_test: 653
+    r2: 0.58607647955106
+    rmse: 21.585399029417246
+    mae: 12.668442868333528
+  - fold: 5
+    n_test: 653
+    r2: 0.5370165397479864
+    rmse: 18.48033464219654
+    mae: 11.984347299231677
+  - fold: 6
+    n_test: 652
+    r2: 0.6435469914429928
+    rmse: 20.626685470799604
+    mae: 12.651121055733329
+  - fold: 7
+    n_test: 652
+    r2: 0.5751792382129235
+    rmse: 19.823204122551996
+    mae: 12.552758034069845
+known_limitation: 'spatial fold 0 (the high-pollution region): see the project plan,
+  Phase J item 5'
+library_versions:
+  scikit-learn: 1.9.0
+  xgboost: 3.2.0
+  numpy: 2.4.6
+  pandas: 3.0.5
+baseline_ladder:
+  metrics_ugm3:
+    constant (training mean):
+      pooled r2: -0.0858
+      pooled rmse: 33.3404
+      pooled mae: 20.5309
+      mean fold rmse: 29.1461
+    nearest station (k=1):
+      pooled r2: -0.1089
+      pooled rmse: 33.6928
+      pooled mae: 19.8538
+      mean fold rmse: 29.6913
+    IDW of 5 nearest stations:
+      pooled r2: 0.1229
+      pooled rmse: 29.966
+      pooled mae: 17.4616
+      mean fold rmse: 26.0379
+    Ridge (same features):
+      pooled r2: 0.2741
+      pooled rmse: 27.2613
+      pooled mae: 15.6114
+      mean fold rmse: 23.8251
+    Random Forest:
+      pooled r2: 0.2678
+      pooled rmse: 27.379
+      pooled mae: 15.514
+      mean fold rmse: 23.6206
+    XGBoost:
+      pooled r2: 0.2512
+      pooled rmse: 27.6868
+      pooled mae: 15.6801
+      mean fold rmse: 23.9429
+  paired_rmse_forest_minus_baseline:
+    constant (training mean):
+      n_folds: 8
+      mean_diff: -5.5255
+      std_diff: 3.109100971955955
+      std_err: 1.0992
+      t_stat: -5.0266
+      n_folds_a_better: 8.0
+      verdict: Random Forest clearly better
+    nearest station (k=1):
+      n_folds: 8
+      mean_diff: -6.0706
+      std_diff: 3.34037744257407
+      std_err: 1.181
+      t_stat: -5.1402
+      n_folds_a_better: 7.0
+      verdict: Random Forest clearly better
+    IDW of 5 nearest stations:
+      n_folds: 8
+      mean_diff: -2.4172
+      std_diff: 2.0372237690536705
+      std_err: 0.7203
+      t_stat: -3.356
+      n_folds_a_better: 7.0
+      verdict: Random Forest clearly better
+    Ridge (same features):
+      n_folds: 8
+      mean_diff: -0.2045
+      std_diff: 1.4361909419191972
+      std_err: 0.5078
+      t_stat: -0.4027
+      n_folds_a_better: 3.0
+      verdict: no clear difference
+  strongest_interpolation_baseline: IDW of 5 nearest stations
+  ridge_best_alpha: 0.01
+  interpolation_note: same-month training stations only, average on the log1p scale,
+    inverse-distance weights with power 2
