@@ -119,10 +119,10 @@ xgboost:
   best_search_rmse_log1p: 0.4665961943035073
 rf_vs_xgboost_paired_rmse:
   n_folds: 8
-  mean_diff: -0.3222304829272604
-  std_diff: 0.3941406647943647
-  std_err: 0.13934976840873461
-  t_stat: -2.312386210661708
+  mean_diff: -0.3222304829272593
+  std_diff: 0.3941406647943655
+  std_err: 0.13934976840873486
+  t_stat: -2.3123862106616957
   n_folds_a_better: 6
   verdict: Random Forest clearly better
   note: differences are random forest minus XGBoost; negative favours the random forest
@@ -145,38 +145,38 @@ per_fold_metrics_ugm3:
     mae: 39.64863163038005
   - fold: 1
     n_test: 640
-    r2: 0.3299408836777419
+    r2: 0.32994088367774177
     rmse: 16.999444920103524
     mae: 9.917636743564469
   - fold: 2
     n_test: 660
-    r2: 0.3561872548088113
+    r2: 0.3561872548088112
     rmse: 20.093658408169045
     mae: 14.092259089970335
   - fold: 3
     n_test: 656
-    r2: 0.27301531357522935
+    r2: 0.27301531357522946
     rmse: 17.455446191487006
     mae: 12.97216828895876
   - fold: 4
     n_test: 646
-    r2: 0.3648938712851606
+    r2: 0.3648938712851605
     rmse: 17.45904210076869
-    mae: 11.370604477480319
+    mae: 11.370604477480322
   - fold: 5
     n_test: 638
-    r2: 0.43362747051471107
-    rmse: 19.590725138451376
-    mae: 11.36131903516146
+    r2: 0.43362747051471084
+    rmse: 19.59072513845138
+    mae: 11.361319035161463
   - fold: 6
     n_test: 671
-    r2: 0.11888789568094105
-    rmse: 23.311289759087735
-    mae: 14.225112713664002
+    r2: 0.11888789568094082
+    rmse: 23.31128975908774
+    mae: 14.225112713664005
   - fold: 7
     n_test: 657
-    r2: 0.5201378802752585
-    rmse: 14.517644484234873
+    r2: 0.5201378802752583
+    rmse: 14.517644484234875
     mae: 10.330377749486345
   xgboost_spatial_folds:
   - fold: 0
@@ -224,7 +224,7 @@ per_fold_metrics_ugm3:
     n_test: 653
     r2: 0.56551237605348
     rmse: 23.86043843227735
-    mae: 13.536455428514024
+    mae: 13.536455428514026
   - fold: 1
     n_test: 653
     r2: 0.6225093583097534
@@ -234,31 +234,31 @@ per_fold_metrics_ugm3:
     n_test: 653
     r2: 0.6082341469169293
     rmse: 18.593568072446317
-    mae: 11.719166018530416
+    mae: 11.719166018530418
   - fold: 3
     n_test: 653
-    r2: 0.6298036339899683
-    rmse: 18.636802938725626
+    r2: 0.6298036339899682
+    rmse: 18.63680293872563
     mae: 12.261546902628648
   - fold: 4
     n_test: 653
     r2: 0.58607647955106
-    rmse: 21.585399029417246
+    rmse: 21.585399029417243
     mae: 12.668442868333528
   - fold: 5
     n_test: 653
-    r2: 0.5370165397479864
-    rmse: 18.48033464219654
-    mae: 11.984347299231677
+    r2: 0.5370165397479867
+    rmse: 18.480334642196535
+    mae: 11.984347299231676
   - fold: 6
     n_test: 652
-    r2: 0.6435469914429928
-    rmse: 20.626685470799604
+    r2: 0.6435469914429927
+    rmse: 20.626685470799607
     mae: 12.651121055733329
   - fold: 7
     n_test: 652
-    r2: 0.5751792382129235
-    rmse: 19.823204122551996
+    r2: 0.5751792382129234
+    rmse: 19.823204122552
     mae: 12.552758034069845
 known_limitation: 'spatial fold 0 (the high-pollution region): see the project plan,
   Phase J item 5'
@@ -311,7 +311,7 @@ baseline_ladder:
     nearest station (k=1):
       n_folds: 8
       mean_diff: -6.0706
-      std_diff: 3.34037744257407
+      std_diff: 3.3403774425740695
       std_err: 1.181
       t_stat: -5.1402
       n_folds_a_better: 7.0
@@ -319,7 +319,7 @@ baseline_ladder:
     IDW of 5 nearest stations:
       n_folds: 8
       mean_diff: -2.4172
-      std_diff: 2.0372237690536705
+      std_diff: 2.037223769053671
       std_err: 0.7203
       t_stat: -3.356
       n_folds_a_better: 7.0
@@ -327,7 +327,7 @@ baseline_ladder:
     Ridge (same features):
       n_folds: 8
       mean_diff: -0.2045
-      std_diff: 1.4361909419191972
+      std_diff: 1.4361909419191976
       std_err: 0.5078
       t_stat: -0.4027
       n_folds_a_better: 3.0
@@ -336,3 +336,108 @@ baseline_ladder:
   ridge_best_alpha: 0.01
   interpolation_note: same-month training stations only, average on the log1p scale,
     inverse-distance weights with power 2
+definitive_model:
+  model: Ridge regression (StandardScaler + Ridge)
+  reason: Tied with the Random Forest on the spatial folds (paired RMSE test, ridge
+    minus forest, |t| < 2), and the Random Forest tied XGBoost in Step 4; the simplest
+    model with the same score wins (plan v14, Phase I step 3). It can also extrapolate
+    beyond the training range and its coefficients are directly interpretable.
+  features:
+  - no2
+  - aai
+  - total_precipitation
+  - temperature
+  - dew_point
+  - u_wind
+  - v_wind
+  - wind_magnitude
+  - boundary_layer_height
+  - surface_pressure
+  - relative_humidity
+  - sin_month
+  - cos_month
+  target: log1p_pm25
+  best_alpha: 0.01
+  alpha_search_grid:
+  - 0.01
+  - 0.03162277660168379
+  - 0.1
+  - 0.31622776601683794
+  - 1.0
+  - 3.1622776601683795
+  - 10.0
+  - 31.622776601683793
+  - 100.0
+  - 316.2277660168379
+  - 1000.0
+  alpha_at_grid_edge: true
+  standardised_coefficients_log1p:
+    temperature: -0.5325792490299472
+    dew_point: 0.29534386366637505
+    relative_humidity: -0.21802570962119813
+    aai: 0.1718404909799082
+    boundary_layer_height: 0.1476433947718705
+    surface_pressure: 0.13134196504525228
+    wind_magnitude: -0.08701066138010674
+    no2: 0.07401149396703925
+    v_wind: -0.06318787730842343
+    sin_month: -0.047034435915044075
+    u_wind: -0.04645772531637773
+    total_precipitation: -0.03143524444618343
+    cos_month: 0.03058469982984648
+  intercept_log1p: 3.638169875449308
+  paired_rmse_ridge_minus_forest:
+    n_folds: 8
+    mean_diff: 0.20447437667130042
+    std_diff: 1.4361909419191976
+    std_err: 0.5077701770548798
+    t_stat: 0.40269079577944733
+    n_folds_a_better: 5
+  pooled_metrics_ugm3:
+    r2: 0.2740614603803553
+    rmse: 27.261316790877483
+    mae: 15.611355663206238
+  per_fold_metrics_ugm3:
+  - fold: 0
+    n_test: 654
+    r2: -0.08206042426980753
+    rmse: 58.12694614933955
+    mae: 37.86598106918468
+  - fold: 1
+    n_test: 640
+    r2: 0.31503543769502473
+    rmse: 17.187481041584423
+    mae: 10.23602374111688
+  - fold: 2
+    n_test: 660
+    r2: 0.37400409101539567
+    rmse: 19.813672375519932
+    mae: 14.107428960377813
+  - fold: 3
+    n_test: 656
+    r2: -0.002529297934215302
+    rmse: 20.49825350850577
+    mae: 14.274006916043987
+  - fold: 4
+    n_test: 646
+    r2: 0.245635022489048
+    rmse: 19.02777551714583
+    mae: 12.174872825201081
+  - fold: 5
+    n_test: 638
+    r2: 0.4809935699358765
+    rmse: 18.75364929842022
+    mae: 11.555693903669395
+  - fold: 6
+    n_test: 671
+    r2: 0.1314035261926083
+    rmse: 23.145136688507094
+    mae: 14.368240042077929
+  - fold: 7
+    n_test: 657
+    r2: 0.5506803901291284
+    rmse: 14.048035934293756
+    mae: 10.1276273745387
+  saved_model: data/models/ridge_best.joblib
+  note: chosen_model and headline_metrics_ugm3 above describe the tree-model comparison
+    of Steps 4-8; this section is the model to carry forward to Phase L
