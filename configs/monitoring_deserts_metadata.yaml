@@ -1,0 +1,83 @@
+distance: great-circle km to the nearest active station (spatial_cv.nearest_distance_km)
+active_station_rule: stations with PM2.5 in at least 1 month(s) of the study period
+n_active_stations: 343
+thresholds_km:
+- 10
+- 25
+- 50
+- 100
+- 200
+map_threshold_km: 100
+grid_cell_size_deg: 0.05
+n_cells: 434940
+n_cells_without_population: 279850
+n_cells_without_prediction: 0
+summary:
+- threshold_km: 10.0
+  n_desert_cells: 432424.0
+  share_cells: 0.994215294063549
+  desert_area_km2: 12237785.384933542
+  share_area: 0.9942024062402081
+  desert_population: 1571502355.4350858
+  share_population: 0.8729166375389993
+  desert_cells_without_population: 279841.0
+  value_mean_monitored: 38.462633835681864
+  value_popweighted_monitored: 40.34634371504314
+  value_mean_desert: 34.07429380868583
+  value_popweighted_desert: 38.1032208370861
+  prob_desert_higher: 0.3008944929021704
+- threshold_km: 25.0
+  n_desert_cells: 422428.0
+  share_cells: 0.9712328137214329
+  desert_area_km2: 11954334.428428903
+  share_area: 0.9711747411730509
+  desert_population: 1377694328.3049889
+  share_population: 0.7652628050230228
+  desert_cells_without_population: 279603.0
+  value_mean_monitored: 37.076733560513354
+  value_popweighted_monitored: 39.78345032778976
+  value_mean_desert: 34.011500947732145
+  value_popweighted_desert: 37.960330369780415
+  prob_desert_higher: 0.3406940976042964
+- threshold_km: 50.0
+  n_desert_cells: 396009.0
+  share_cells: 0.910491102220996
+  desert_area_km2: 11204345.558632534
+  share_area: 0.9102453560309554
+  desert_population: 1016614657.6217043
+  share_population: 0.5646952074458128
+  desert_cells_without_population: 278548.0
+  value_mean_monitored: 36.149750970029764
+  value_popweighted_monitored: 39.17128699437639
+  value_mean_desert: 33.89813983430555
+  value_popweighted_desert: 37.7846937504069
+  prob_desert_higher: 0.3650272215701448
+- threshold_km: 100.0
+  n_desert_cells: 344936.0
+  share_cells: 0.793065710212903
+  desert_area_km2: 9750622.266999796
+  share_area: 0.7921443149448723
+  desert_population: 478786367.3989698
+  share_population: 0.26594970378756433
+  desert_cells_without_population: 274101.0
+  value_mean_monitored: 35.01981867847906
+  value_popweighted_monitored: 38.289962364225445
+  value_mean_desert: 33.859587437437405
+  value_popweighted_desert: 38.65966411310637
+  prob_desert_higher: 0.40504133783414803
+- threshold_km: 200.0
+  n_desert_cells: 294901.0
+  share_cells: 0.6780268542787511
+  desert_area_km2: 8329599.253891293
+  share_area: 0.6766998571024816
+  desert_population: 167592121.14730382
+  share_population: 0.09309177957256715
+  desert_cells_without_population: 257788.0
+  value_mean_monitored: 33.950863296761796
+  value_popweighted_monitored: 38.14643663454123
+  value_mean_desert: 34.17034688740463
+  value_popweighted_desert: 40.74438675859402
+  prob_desert_higher: 0.4688378357454253
+note: Predicted values carry the uncertainty of notebook 11; prob_desert_higher is
+  rank-based and does not depend on their level.
+file: /home/tom/datascience/projects/monitoring_deserts/data/processed/cell_monitoring_status.parquet
