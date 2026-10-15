@@ -1,0 +1,93 @@
+model: Ridge regression (StandardScaler + Ridge)
+model_file: data/models/ridge_best.joblib
+second_opinion_model: Random Forest, data/models/random_forest.joblib (disagreement
+  indicator only)
+features:
+- no2
+- aai
+- total_precipitation
+- temperature
+- dew_point
+- u_wind
+- v_wind
+- wind_magnitude
+- boundary_layer_height
+- surface_pressure
+- relative_humidity
+- sin_month
+- cos_month
+target_transform: log1p; predictions back-transformed with expm1 and clipped at zero
+n_rows: 6959040
+n_rows_predicted: 6959040
+n_clipped_at_zero: 0
+residual_band:
+  level: 0.9
+  source: spatial out-of-fold residuals of the Ridge on the log1p scale (data/models/oof_predictions.parquet)
+  lower_offset_log1p: -0.6964874445989395
+  upper_offset_log1p: 0.7381575420924472
+  share_inside_band_by_fold:
+    0: 0.7798165137614679
+    1: 0.9203125
+    2: 0.8803030303030303
+    3: 0.899390243902439
+    4: 0.9272445820433437
+    5: 0.9529780564263323
+    6: 0.8852459016393442
+    7: 0.954337899543379
+  note: One width for the whole grid; not a calibrated prediction interval.
+out_of_range_check:
+  reference: data/processed/master_station_df.parquet
+  quantiles:
+  - 0.01
+  - 0.99
+  features_checked:
+  - no2
+  - aai
+  - total_precipitation
+  - temperature
+  - dew_point
+  - u_wind
+  - v_wind
+  - wind_magnitude
+  - boundary_layer_height
+  - surface_pressure
+  - relative_humidity
+  limits:
+    no2:
+      lower: 1.3677317849149015e-05
+      upper: 0.00022339706831738182
+    aai:
+      lower: -0.909204483560088
+      upper: 1.1352852915546223
+    total_precipitation:
+      lower: 0.0
+      upper: 0.0182336401510102
+    temperature:
+      lower: 285.4197345346809
+      upper: 307.45836753469257
+    dew_point:
+      lower: 280.64967683263524
+      upper: 299.9082118528125
+    u_wind:
+      lower: -2.4739781757412107
+      upper: 4.4423160933307955
+    v_wind:
+      lower: -2.130699090916262
+      upper: 2.97799300374473
+    wind_magnitude:
+      lower: 0.20325440799254912
+      upper: 4.937155731494133
+    boundary_layer_height:
+      lower: 209.99198158422706
+      upper: 1181.2248970903315
+    surface_pressure:
+      lower: 90485.99159962065
+      upper: 101246.42176361417
+    relative_humidity:
+      lower: 28.50619946365841
+      upper: 89.31270024082815
+file: /home/tom/datascience/projects/monitoring_deserts/data/processed/grid_predictions.parquet
+library_versions:
+  scikit-learn: 1.9.0
+  numpy: 2.4.6
+  pandas: 3.0.5
