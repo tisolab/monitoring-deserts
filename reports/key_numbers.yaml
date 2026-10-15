@@ -1,0 +1,326 @@
+sources: configs/*.yaml written by notebooks 09-14; area shares recomputed over the
+  study-country mask by this script
+data:
+  n_stations: 343
+  n_station_months: 5222
+  n_months: 16
+  n_cells: 434940
+  n_cells_study_area: 155119
+  grid_cell_size_deg: 0.05
+cross_validation:
+  spatial:
+    r2: 0.2677813002283317
+    rmse: 27.378982915961448
+    mae: 15.514011269294055
+  random:
+    r2: 0.5982151743874111
+    rmse: 20.281200947016163
+    mae: 12.557073502042126
+baseline_ladder_pooled_r2:
+  constant (training mean): -0.0858
+  nearest station (k=1): -0.1089
+  IDW of 5 nearest stations: 0.1229
+  Ridge (same features): 0.2741
+  Random Forest: 0.2678
+  XGBoost: 0.2512
+ridge:
+  best_alpha: 0.01
+  alpha_at_grid_edge: true
+  paired_rmse_ridge_minus_forest:
+    n_folds: 8
+    mean_diff: 0.20447437667130042
+    std_diff: 1.4361909419191976
+    std_err: 0.5077701770548798
+    t_stat: 0.40269079577944733
+    n_folds_a_better: 5
+coefficients_log1p:
+  temperature: -0.5325792490299472
+  dew_point: 0.29534386366637505
+  relative_humidity: -0.21802570962119813
+  aai: 0.1718404909799082
+  boundary_layer_height: 0.1476433947718705
+  surface_pressure: 0.13134196504525228
+  wind_magnitude: -0.08701066138010674
+  no2: 0.07401149396703925
+  v_wind: -0.06318787730842343
+  sin_month: -0.047034435915044075
+  u_wind: -0.04645772531637773
+  total_precipitation: -0.03143524444618343
+  cos_month: 0.03058469982984648
+desert_study_area:
+- threshold_km: 25
+  n_desert_cells: 142854
+  share_cells: 0.9209
+  desert_area_km2: 3999046.2597
+  share_area: 0.9201
+  desert_population: 1377694328.305
+  share_population: 0.7653
+  desert_cells_without_population: 42
+- threshold_km: 50
+  n_desert_cells: 117490
+  share_cells: 0.7574
+  desert_area_km2: 3280307.5801
+  share_area: 0.7547
+  desert_population: 1016614657.6217
+  share_population: 0.5647
+  desert_cells_without_population: 42
+- threshold_km: 100
+  n_desert_cells: 70864
+  share_cells: 0.4568
+  desert_area_km2: 1957577.0424
+  share_area: 0.4504
+  desert_population: 478786367.399
+  share_population: 0.2659
+  desert_cells_without_population: 42
+- threshold_km: 200
+  n_desert_cells: 37139
+  share_cells: 0.2394
+  desert_area_km2: 1014531.0731
+  share_area: 0.2334
+  desert_population: 167592121.1473
+  share_population: 0.0931
+  desert_cells_without_population: 39
+desert_notebook12_population_shares:
+  10: 0.8729166375389993
+  25: 0.7652628050230228
+  50: 0.5646952074458128
+  100: 0.26594970378756433
+  200: 0.09309177957256715
+equity:
+  share_in_desert_by_group_and_threshold:
+  - index: 0 (poorest)
+    '> 25 km': 0.9167428792
+    '> 50 km': 0.7135324854
+    '> 100 km': 0.3573329761
+    '> 200 km': 0.1294709444
+  - index: '1'
+    '> 25 km': 0.8856762487
+    '> 50 km': 0.6566864165
+    '> 100 km': 0.2909667454
+    '> 200 km': 0.0845176773
+  - index: '2'
+    '> 25 km': 0.8475724193
+    '> 50 km': 0.6002142857
+    '> 100 km': 0.2486486975
+    '> 200 km': 0.0686880112
+  - index: '3'
+    '> 25 km': 0.7445184013
+    '> 50 km': 0.5217651529
+    '> 100 km': 0.2270839787
+    '> 200 km': 0.0845777318
+  - index: 4 (richest)
+    '> 25 km': 0.4278801967
+    '> 50 km': 0.325364463
+    '> 100 km': 0.1984926441
+    '> 200 km': 0.0929838773
+  poorest_minus_richest:
+  - proxy: RWI
+    threshold_km: 25
+    estimate: 0.4888627231
+    lower: 0.3100949317
+    upper: 0.6246107444
+  - proxy: RWI
+    threshold_km: 50
+    estimate: 0.3881679773
+    lower: 0.2389534317
+    upper: 0.4779936478
+  - proxy: RWI
+    threshold_km: 100
+    estimate: 0.1588403434
+    lower: 0.0613896109
+    upper: 0.2434014499
+  - proxy: RWI
+    threshold_km: 200
+    estimate: 0.0364870727
+    lower: -0.0516493084
+    upper: 0.1081815446
+  - proxy: night light per person
+    threshold_km: 25
+    estimate: 0.0682618022
+    lower: -0.0142507136
+    upper: 0.145501855
+  - proxy: night light per person
+    threshold_km: 50
+    estimate: 0.0784355998
+    lower: -0.0402948692
+    upper: 0.1810913451
+  - proxy: night light per person
+    threshold_km: 100
+    estimate: 0.1036378294
+    lower: -0.0399912905
+    upper: 0.249514205
+  - proxy: night light per person
+    threshold_km: 200
+    estimate: 0.0097219571
+    lower: -0.0635915939
+    upper: 0.1484218858
+  correlations:
+  - index: Spearman, distance vs RWI
+    estimate: -0.246669693
+    lower: -0.3013274212
+    upper: -0.1833980222
+    n_blocks: 75.0
+  - index: partial, controlling density
+    estimate: -0.0784235228
+    lower: -0.1219125755
+    upper: -0.0246225122
+    n_blocks: 75.0
+  - index: partial, controlling density and night light
+    estimate: 0.0099347886
+    lower: -0.0281886658
+    upper: 0.0556447601
+    n_blocks: 75.0
+  sample:
+    n_cells_total: 434940
+    n_cells_without_population: 279850
+    n_cells_in_sample: 155033
+    population_in_sample: 1800289024.0
+    n_cells_with_rwi: 137025
+    population_with_rwi: 1795374592.0
+uncertainty:
+  band:
+    level: 0.9
+    source: spatial out-of-fold residuals of the Ridge on the log1p scale (data/models/oof_predictions.parquet)
+    lower_offset_log1p: -0.6964874445989395
+    upper_offset_log1p: 0.7381575420924472
+    share_inside_band_by_fold:
+      0: 0.7798165137614679
+      1: 0.9203125
+      2: 0.8803030303030303
+      3: 0.899390243902439
+      4: 0.9272445820433437
+      5: 0.9529780564263323
+      6: 0.8852459016393442
+      7: 0.954337899543379
+    note: One width for the whole grid; not a calibrated prediction interval.
+  out_of_range_share:
+    no feature outside (rows): 0.23525486273968824
+    1 or 2 features outside: 0.28612322964087
+    3 or more features outside: 0.4786219076194418
+validation:
+  seasonal_cycle:
+    months: 16
+    pearson: 0.9777277068285535
+    spearman: 0.9705882352941176
+  spot_checks:
+  - place: Delhi
+    expected: high
+    predicted_pm25: 56.3011589050293
+    band_low: 27.555038452148438
+    band_high: 118.87844848632812
+    percentile_among_populated: 0.99268542826366
+    distance_to_station_km: 2.5364056658312273
+    mean_features_out_of_range: 0.0625
+    consistent: true
+  - place: Lahore
+    expected: high
+    predicted_pm25: 57.986328125
+    band_low: 28.394811630249023
+    band_high: 122.40396118164062
+    percentile_among_populated: 0.9966845768320293
+    distance_to_station_km: 2.2518427283884166
+    mean_features_out_of_range: 0.25
+    consistent: true
+  - place: Lucknow
+    expected: high
+    predicted_pm25: 48.4239616394043
+    band_low: 23.62957191467285
+    band_high: 102.39875030517578
+    percentile_among_populated: 0.9037108228570692
+    distance_to_station_km: 2.335498374514467
+    mean_features_out_of_range: 0.0
+    consistent: true
+  - place: Patna
+    expected: high
+    predicted_pm25: 46.26796340942383
+    band_low: 22.5551700592041
+    band_high: 97.88824462890625
+    percentile_among_populated: 0.8634484271090671
+    distance_to_station_km: 2.1211290635214346
+    mean_features_out_of_range: 0.25
+    consistent: true
+  - place: Dhaka
+    expected: high
+    predicted_pm25: 50.94708251953125
+    band_low: 24.886926651000977
+    band_high: 107.67731475830078
+    percentile_among_populated: 0.9453213186869892
+    distance_to_station_km: 15.200507667611618
+    mean_features_out_of_range: 0.3125
+    consistent: true
+  - place: Kolkata
+    expected: high
+    predicted_pm25: 44.59809875488281
+    band_low: 21.7230224609375
+    band_high: 94.3947525024414
+    percentile_among_populated: 0.8116207517109261
+    distance_to_station_km: 2.540849869896563
+    mean_features_out_of_range: 0.4375
+    consistent: true
+  - place: Leh (Ladakh)
+    expected: low
+    predicted_pm25: 37.533390045166016
+    band_low: 18.20244789123535
+    band_high: 79.61483764648438
+    percentile_among_populated: 0.5399108576883631
+    distance_to_station_km: 256.1994411329751
+    mean_features_out_of_range: 3.75
+    consistent: false
+  - place: Munnar (Western Ghats)
+    expected: low
+    predicted_pm25: 23.187393188476562
+    band_low: 11.053367614746094
+    band_high: 49.601898193359375
+    percentile_among_populated: 0.01432598221023911
+    distance_to_station_km: 96.37618406227101
+    mean_features_out_of_range: 1.9375
+    consistent: true
+  - place: Nuwara Eliya (Sri Lanka)
+    expected: low
+    predicted_pm25: 21.05560874938965
+    band_low: 9.9910306930542
+    band_high: 45.14204406738281
+    percentile_among_populated: 0.005734263027871485
+    distance_to_station_km: 452.81876114774883
+    mean_features_out_of_range: 1.8125
+    consistent: true
+  - place: Port Blair (Andaman)
+    expected: low
+    predicted_pm25: 26.67673683166504
+    band_low: 12.792222023010254
+    band_high: 56.90187454223633
+    percentile_among_populated: 0.0514019595827985
+    distance_to_station_km: 1209.1732344551758
+    mean_features_out_of_range: 2.5
+    consistent: true
+  - place: Arabian Sea
+    expected: ocean
+    predicted_pm25: 34.88844299316406
+    band_low: 16.884382247924805
+    band_high: 74.0813980102539
+    percentile_among_populated: 0.4282636599949688
+    distance_to_station_km: 942.9818884926575
+    mean_features_out_of_range: 3.0
+    consistent: null
+  validated_distance_km:
+    prediction cells (reality):
+      10th percentile (km): 28.7
+      25th percentile (km): 51.0
+      50th percentile (km): 90.8
+      75th percentile (km): 190.4
+      90th percentile (km): 374.7
+      closest (km): 0.1
+    random folds (over rows):
+      10th percentile (km): 0.0
+      25th percentile (km): 0.0
+      50th percentile (km): 0.0
+      75th percentile (km): 0.0
+      90th percentile (km): 0.0
+      closest (km): 0.0
+    spatial folds (GroupKFold):
+      10th percentile (km): 90.9
+      25th percentile (km): 106.1
+      50th percentile (km): 138.8
+      75th percentile (km): 183.7
+      90th percentile (km): 230.8
+      closest (km): 46.5
