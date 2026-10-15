@@ -80,4 +80,4 @@ summary:
   prob_desert_higher: 0.4688378357454253
 note: Predicted values carry the uncertainty of notebook 11; prob_desert_higher is
   rank-based and does not depend on their level.
-file: /home/tom/datascience/projects/monitoring_deserts/data/processed/cell_monitoring_status.parquet
+file: ../data/processed/cell_monitoring_status.parquet

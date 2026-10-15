@@ -19,12 +19,14 @@ env_vars:
   cartodb_api_key: CARTODB_API_KEY
   gee_project_id: GEE_PROJECT_ID
 
+# Paths are relative to the noteboox/ folder, where the notebooks run (the same convention as the
+# "../configs/..." they use to open this file). Scripts resolve them the same way.
 data_dir:
-  raw: /home/tom/datascience/projects/monitoring_deserts/data/raw
-  processed: /home/tom/datascience/projects/monitoring_deserts/data/processed
-  clean: /home/tom/datascience/projects/monitoring_deserts/data/clean
-  models: /home/tom/datascience/projects/monitoring_deserts/data/models
+  raw: ../data/raw
+  processed: ../data/processed
+  clean: ../data/clean
+  models: ../data/models
 
 output_dir:
-    maps: /home/tom/datascience/projects/monitoring_deserts/outputs/maps
-    plots: /home/tom/datascience/projects/monitoring_deserts/outputs/plots
+    maps: ../outputs/maps
+    plots: ../outputs/plots

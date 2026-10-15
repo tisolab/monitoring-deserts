@@ -86,7 +86,7 @@ out_of_range_check:
     relative_humidity:
       lower: 28.50619946365841
       upper: 89.31270024082815
-file: /home/tom/datascience/projects/monitoring_deserts/data/processed/grid_predictions.parquet
+file: ../data/processed/grid_predictions.parquet
 library_versions:
   scikit-learn: 1.9.0
   numpy: 2.4.6

@@ -164,6 +164,6 @@ ranking_stability:
   top_10_in_common: 10.0
 n_desert_zones: 1058
 files:
-  zones: /home/tom/datascience/projects/monitoring_deserts/data/clean/equity/desert_zones_ranked.parquet
+  zones: ../data/clean/equity/desert_zones_ranked.parquet
 note: Associations, not causes; income proxies are proxies; predicted PM2.5 carries
   the uncertainty of notebook 11.

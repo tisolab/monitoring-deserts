@@ -58,9 +58,9 @@ model_features_share_missing:
   cos_month: 0.0
 rows_complete_for_model: 6959040
 files:
-  grid_satellite: /home/tom/datascience/projects/monitoring_deserts/data/clean/satellite/grid_satellite.parquet
-  master_grid: /home/tom/datascience/projects/monitoring_deserts/data/processed/master_grid_df.parquet
-  raw_arrays: /home/tom/datascience/projects/monitoring_deserts/data/raw/satellite/grid
+  grid_satellite: ../data/clean/satellite/grid_satellite.parquet
+  master_grid: ../data/processed/master_grid_df.parquet
+  raw_arrays: ../data/raw/satellite/grid
 library_versions:
   earthengine-api: 1.7.41
   numpy: 2.4.6
