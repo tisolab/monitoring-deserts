@@ -42,8 +42,8 @@ dependencies = [
 dev = ["pytest>=8"]
 
 [project.urls]
-Homepage = "https://github.com/YOUR_GITHUB_USER/monitoring-deserts"
-Issues = "https://github.com/YOUR_GITHUB_USER/monitoring-deserts/issues"
+Homepage = "https://github.com/tisolab/monitoring-deserts"
+Issues = "https://github.com/tisolab/monitoring-deserts/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -202,5 +202,5 @@ def main(repo_url):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--repo-url", default="https://github.com/YOUR_GITHUB_USER/monitoring-deserts", help="link shown in the map's title box")
+    parser.add_argument("--repo-url", default="https://github.com/tisolab/monitoring-deserts", help="link shown in the map's title box")
     main(parser.parse_args().repo_url)
