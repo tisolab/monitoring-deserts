@@ -1,0 +1,24 @@
+# Secrets
+*.env*
+!.env.example
+
+# Local notes, scratch and tool folders
+*_CLAUDE*
+*claude*
+*toy*
+notes/
+.jupyter*
+*egg-info*
+.ipynb_checkpoints/
+__pycache__/
+*.pyc
+*.swp
+.DS_Store
+
+# Data and generated outputs stay out of git (see data/README.md); curated figures live in reports/ and docs/
+/data/**
+!/data/**/
+!/data/**/*.yaml
+!/data/**/*.yml
+!/data/README.md
+/outputs/
