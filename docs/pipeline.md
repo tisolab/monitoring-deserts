@@ -20,7 +20,7 @@ The "phase" letters are the stages of the original build plan; the methodology p
 | M | Define and map the monitoring deserts | `12_monitoring_deserts` | `features/deserts.py` | `data/processed/cell_monitoring_status.parquet`, `configs/monitoring_deserts_metadata.yaml` |
 | N | Equity analysis | `13_equity_analysis` | `features/equity.py` | `data/clean/equity/`, `configs/equity_metadata.yaml` |
 | O | Validation and limitations | `14_validation_and_limitations` | | `configs/validation_metadata.yaml` |
-| P | Packaging | `scripts/make_report_assets.py` | `data/fetch_boundaries.py`, `viz/` | `reports/`, `docs/index.html` |
+| P | Packaging | `scripts/make_report_assets.py` | `data/fetch_boundaries.py`, `viz/` | `reports/`, `docs/index.html` (summary page), `docs/map.html` |
 
 ## Conventions
 

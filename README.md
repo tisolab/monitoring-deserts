@@ -6,7 +6,7 @@
 ![Python 3.11](https://img.shields.io/badge/python-3.11-blue)
 [![MIT licence](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
 
-**[Interactive map](https://tisolab.github.io/monitoring-deserts/)** · **[Write-up](reports/writeup.md)** · **[Methodology notes](docs/methodology/)** · **[Pipeline](docs/pipeline.md)** · **[Known issues](docs/known_issues.md)**
+**[Project page](https://tisolab.github.io/monitoring-deserts/)** · **[Interactive map](https://tisolab.github.io/monitoring-deserts/map.html)** · **[Write-up](reports/writeup.md)** · **[Methodology notes](docs/methodology/)** · **[Pipeline](docs/pipeline.md)** · **[Known issues](docs/known_issues.md)**
 
 ![Predicted PM2.5 over India, Pakistan, Bangladesh, Nepal and Sri Lanka, with the monitoring stations and the area more than 100 km from any station hatched](reports/figures/hero_map.png)
 
@@ -18,7 +18,7 @@ Numbers are from the saved outputs in `configs/` (collected in [`reports/key_num
 2. **Predicting a region the model has never seen is much harder than ordinary cross-validation suggests.** The same Random Forest scores $R^2 = 0.60$ on random folds and $R^2 = 0.27$ when whole regions are held out (RMSE 27 µg/m³, MAE 16 µg/m³ pooled). A project that reported the random-fold number would have overstated its skill by more than a factor of two.
 3. **The features carry real information, and a simple model is enough.** Satellite and weather features beat inverse-distance interpolation of the nearest stations (paired test over the eight folds, $t = -3.4$). A Ridge regression, a Random Forest and XGBoost are statistically tied, so the simplest, Ridge, is the definitive model. Most of its skill is meteorological and seasonal; the satellite NO2 and aerosol-index terms add comparatively little.
 4. **The poorest people are more often far from a monitor, but much of that is urban versus rural.** Beyond 25 km from a station live 92% of the poorest fifth (by the Relative Wealth Index) against 43% of the richest fifth; at 100 km the figures are 36% and 20%, and at 200 km the groups are not distinguishable. The rank correlation between distance to a station and wealth is −0.25, falls to −0.08 after controlling for population density, and to 0.01 after controlling for density and night-time light. A second income proxy gives gaps of the same sign with intervals that include zero.
-5. **Where a new monitor would cover the most exposure** is ranked over 0.5° zones in the desert and listed on the [interactive map](https://tisolab.github.io/monitoring-deserts/) (exposure = predicted PM2.5 × population). The ranking is dominated by population and is stable across the lower and upper bounds of the uncertainty band.
+5. **Where a new monitor would cover the most exposure** is ranked over 0.5° zones in the desert and listed on the [interactive map](https://tisolab.github.io/monitoring-deserts/map.html) (exposure = predicted PM2.5 × population). The ranking is dominated by population and is stable across the lower and upper bounds of the uncertainty band.
 6. **Sanity checks pass, with one clear exception.** The predicted national seasonal cycle follows the observed one (correlation 0.98 over 16 months), and nine of ten spot-checked places behave as expected (Delhi and Lahore in the top 2% of populated cells, Munnar and Nuwara Eliya in the bottom 2%). The high-altitude town of Leh does not: the model has no elevation feature.
 
 ## Figures
@@ -56,7 +56,7 @@ configs/         project settings and one metadata file per stage (settings and 
 scripts/         make_report_assets.py: figures, key numbers and the web map
 tests/           pytest suite for the source modules (synthetic data, no network)
 reports/         the write-up, the figures and key_numbers.yaml
-docs/            the GitHub Pages map, the pipeline table, the methodology notes and known issues
+docs/            the GitHub Pages site (summary page and map), the pipeline table, the methodology notes and known issues
 data/            not in git; layout described in data/README.md
 ```
 
@@ -68,7 +68,7 @@ conda activate mon-des
 cp .env.example .env                         # then fill in the three keys (see below)
 pytest                                       # the source modules, on synthetic data
 jupyter lab                                  # run noteboox/01 ... 14 in order
-python scripts/make_report_assets.py         # rebuild reports/figures, key_numbers.yaml and docs/index.html
+python scripts/make_report_assets.py         # rebuild reports/figures, key_numbers.yaml and the pages in docs/
 ```
 
 Keys in `.env`: `OPENAQ_API_KEY` (free, from OpenAQ), `GEE_PROJECT_ID` (a Google Cloud project registered for Earth Engine, and `ee.Authenticate()` once), and `CARTODB_API_KEY` if used. ERA5 needs a Copernicus Climate Data Store account (`~/.cdsapirc`). The notebooks download the data into `data/`; the first full run is dominated by the Earth Engine and ERA5 requests. Settings (study period, bounding box, grid size, paths) are in `configs/`.
