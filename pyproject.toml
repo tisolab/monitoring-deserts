@@ -6,15 +6,51 @@ build-backend = "setuptools.build_meta"
 name = "monitoring-deserts"
 version = "0.1.0"
 description = "Mapping air-quality monitoring gaps and environmental justice in South Asia"
-requires-python = ">=3.11"
 readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Tommaso Isolabella" }]
 dependencies = [
-    "pandas>=2.0",
+    "numpy>=2.0",
+    "pandas>=2.2",
+    "scipy>=1.13",
+    "scikit-learn>=1.5",
+    "xgboost>=2.1",
+    "joblib",
+    "pyarrow>=15",
+    "geopandas>=1.0",
+    "shapely>=2.0",
+    "pyproj",
+    "rasterio>=1.4",
+    "rioxarray>=0.15",
+    "xarray>=2024.6",
+    "netCDF4",
+    "matplotlib>=3.8",
+    "seaborn",
+    "folium",
+    "requests",
+    "tqdm",
+    "pyyaml",
+    "python-dotenv",
+    "cdsapi",
+    "earthengine-api",
+    "geemap",
     "openaq>=1.0",
 ]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.urls]
+Homepage = "https://github.com/YOUR_GITHUB_USER/monitoring-deserts"
+Issues = "https://github.com/YOUR_GITHUB_USER/monitoring-deserts/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-dir]
 "" = "src"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

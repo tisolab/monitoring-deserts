@@ -1,0 +1,43 @@
+name: mon-des
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  # numerical core
+  - numpy>=2.0
+  - pandas>=2.2
+  - scipy>=1.13
+  - scikit-learn>=1.5
+  - xgboost>=2.1
+  - joblib
+  - pyarrow>=15
+  # geospatial and raster
+  - geopandas>=1.0
+  - shapely>=2.0
+  - pyproj
+  - rasterio>=1.4
+  - rioxarray>=0.15
+  - xarray>=2024.6
+  - netcdf4
+  - contextily
+  - geodatasets
+  # plotting and maps
+  - matplotlib>=3.8
+  - seaborn
+  - folium
+  # data access
+  - requests
+  - tqdm
+  - pyyaml
+  - python-dotenv
+  - cdsapi
+  # notebooks
+  - jupyterlab
+  - ipykernel
+  - pip
+  - pip:
+      - earthengine-api
+      - geemap
+      - openaq
+      - pytest
+      - -e .
