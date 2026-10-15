@@ -3,8 +3,6 @@
 !.env.example
 
 # Local notes, scratch and tool folders
-*_CLAUDE*
-*claude*
 *toy*
 notes/
 .jupyter*
