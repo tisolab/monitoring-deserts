@@ -1,0 +1,251 @@
+"""The summary page of the project, served by GitHub Pages (docs/index.html).
+
+A single static HTML page: the question, the main findings as a few headline numbers with the
+figure behind each, a preview of the interactive map, how the pipeline works and what not to
+over-read. Every number comes from `reports/key_numbers.yaml` (itself read from the metadata
+the notebooks save), so the page cannot drift from the analysis. The page is light-only and
+uses the same colours as the figures.
+"""
+
+from pathlib import Path
+from string import Template
+
+FIGURES = ("hero_map.png", "cv_ladder.png", "equity_desert_share.png", "equity_gap.png", "uncertainty.png")
+
+
+def _pct(value, digits=0):
+    return f"{value * 100:.{digits}f}%"
+
+
+def _row(records, **match):
+    """The first record whose fields equal `match`."""
+    return next(r for r in records if all(r.get(k) == v for k, v in match.items()))
+
+
+def headline_numbers(key):
+    """The few numbers the page quotes, read from the key-numbers dictionary.
+
+    Parameters:
+        key (dict): The contents of `reports/key_numbers.yaml`.
+
+    Returns:
+        dict: Plain values and ready-to-print strings, keyed by the placeholders of the page.
+    """
+    desert = key["desert_study_area"]
+    by_threshold = {int(r["threshold_km"]): r for r in desert}
+    shares = {r["index"]: r for r in key["equity"]["share_in_desert_by_group_and_threshold"]}
+    poorest, richest = shares["0 (poorest)"], shares["4 (richest)"]
+    gap = _row(key["equity"]["poorest_minus_richest"], proxy="RWI", threshold_km=25)
+    gap100 = _row(key["equity"]["poorest_minus_richest"], proxy="RWI", threshold_km=100)
+    corr = {r["index"]: r for r in key["equity"]["correlations"]}
+    plain = corr["Spearman, distance vs RWI"]
+    density = corr["partial, controlling density"]
+    both = corr["partial, controlling density and night light"]
+    band = key["uncertainty"]["band"]["share_inside_band_by_fold"]
+    worst_fold = min(band, key=band.get)
+    spot = [r for r in key["validation"]["spot_checks"] if r["consistent"] is not None]
+    validated = key["validation"]["validated_distance_km"]
+    ladder = key["baseline_ladder_pooled_r2"]
+    paired = key["paired_forest_vs_baselines"]["IDW of 5 nearest stations"]
+
+    return {
+        "n_stations": f"{key['data']['n_stations']:,}",
+        "n_station_months": f"{key['data']['n_station_months']:,}",
+        "n_cells": f"{key['data']['n_cells']:,}",
+        "median_km": f"{validated['prediction cells (reality)']['50th percentile (km)']:.0f}",
+        "people_50": _pct(by_threshold[50]["share_population"]),
+        "people_100": _pct(by_threshold[100]["share_population"]),
+        "area_100": _pct(by_threshold[100]["share_area"]),
+        "r2_spatial": f"{key['cross_validation']['spatial']['r2']:.2f}",
+        "r2_random": f"{key['cross_validation']['random']['r2']:.2f}",
+        "rmse_spatial": f"{key['cross_validation']['spatial']['rmse']:.0f}",
+        "ridge_r2": f"{ladder['Ridge (same features)']:.2f}",
+        "forest_r2": f"{ladder['Random Forest']:.2f}",
+        "idw_r2": f"{ladder['IDW of 5 nearest stations']:.2f}",
+        "idw_t": f"{abs(paired['t_stat']):.1f}",
+        "poorest_25": _pct(poorest["> 25 km"]),
+        "richest_25": _pct(richest["> 25 km"]),
+        "poorest_100": _pct(poorest["> 100 km"]),
+        "richest_100": _pct(richest["> 100 km"]),
+        "gap_25": f"{gap['estimate'] * 100:.0f}",
+        "gap_25_low": f"{gap['lower'] * 100:.0f}",
+        "gap_25_high": f"{gap['upper'] * 100:.0f}",
+        "gap_100": f"{gap100['estimate'] * 100:.0f}",
+        "corr_plain": f"{plain['estimate']:.2f}".replace("-", "−"),
+        "corr_density": f"{density['estimate']:.2f}".replace("-", "−"),
+        "corr_both": f"{both['estimate']:.2f}".replace("-", "−"),
+        "band_worst": _pct(band[worst_fold]),
+        "worst_fold": str(worst_fold),
+        "out_of_range": _pct(key["uncertainty"]["out_of_range_share"]["3 or more features outside"]),
+        "season_r": f"{key['validation']['seasonal_cycle']['pearson']:.2f}",
+        "spots_ok": str(sum(bool(r["consistent"]) for r in spot)),
+        "spots_n": str(len(spot)),
+        "cv_far_km": f"{validated['prediction cells (reality)']['90th percentile (km)']:.0f}",
+    }
+
+
+PAGE = Template("""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monitoring deserts in South Asia</title>
+<meta name="description" content="Where air-quality monitors are scarce in South Asia, and who lives there: a machine-learning estimate of PM2.5 checked by holding out whole regions.">
+<meta property="og:title" content="Monitoring deserts in South Asia">
+<meta property="og:description" content="Where air-quality monitors are scarce, who lives there, and how far a model can fill the gaps.">
+<meta property="og:image" content="$pages_url/figures/hero_map.png">
+<style>
+  :root { color-scheme: light; --surface:#fcfcfb; --card:#ffffff; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
+          --line:#e1e0d9; --blue:#2a78d6; --link:#184f95; --orange:#eb6834; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--surface); color:var(--ink);
+         font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; }
+  a { color:var(--link); }
+  .wrap { max-width:980px; margin:0 auto; padding:0 20px; }
+  header { padding:44px 0 8px; }
+  h1 { font-size:clamp(1.9rem,4.6vw,2.7rem); line-height:1.15; margin:0 0 12px; letter-spacing:-0.01em; }
+  .lede { font-size:1.15rem; color:var(--ink2); max-width:46em; margin:0 0 20px; }
+  nav.links { display:flex; flex-wrap:wrap; gap:10px; margin:0 0 6px; }
+  nav.links a { text-decoration:none; padding:9px 16px; border-radius:999px; border:1px solid var(--line); background:var(--card); color:var(--ink); font-weight:600; font-size:.95rem; }
+  nav.links a.primary { background:var(--link); color:#fff; border-color:var(--link); }
+  figure { margin:0; }
+  figure img { display:block; width:100%; height:auto; border-radius:10px; border:1px solid var(--line); background:var(--card); }
+  figcaption { color:var(--ink2); font-size:.9rem; margin-top:8px; }
+  section { padding:34px 0 6px; }
+  h2 { font-size:1.5rem; margin:0 0 6px; line-height:1.25; }
+  .sub { color:var(--ink2); margin:0 0 18px; max-width:46em; }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:14px; margin:18px 0 6px; }
+  .tile { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px; }
+  .tile .num { font-size:2.1rem; font-weight:700; line-height:1.1; letter-spacing:-0.01em; }
+  .tile .what { color:var(--ink2); font-size:.92rem; margin-top:6px; }
+  .finding { display:grid; grid-template-columns:1fr; gap:14px; margin:6px 0 0; }
+  .finding p { margin:0; max-width:46em; }
+  .note { background:var(--card); border:1px solid var(--line); border-left:4px solid var(--orange); border-radius:6px; padding:12px 16px; color:var(--ink2); font-size:.95rem; margin:16px 0 0; max-width:46em; }
+  ol.steps { padding-left:1.2rem; margin:0; max-width:46em; } ol.steps li { margin:6px 0; }
+  .mapframe { width:100%; height:520px; border:1px solid var(--line); border-radius:10px; background:var(--card); }
+  footer { margin:44px 0 40px; padding-top:18px; border-top:1px solid var(--line); color:var(--ink2); font-size:.9rem; }
+  footer ul { padding-left:1.1rem; margin:8px 0; }
+  @media (max-width:560px) { .mapframe { height:420px; } header { padding-top:28px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Monitoring deserts in South Asia</h1>
+  <p class="lede">Where are air-quality monitors scarce, are those gaps concentrated among the poor, and how far can a model fill them in? A machine-learning estimate of PM2.5 for every 5&nbsp;km cell of India, Pakistan, Bangladesh, Nepal and Sri&nbsp;Lanka, checked by holding out whole regions.</p>
+  <nav class="links">
+    <a class="primary" href="map.html">Open the interactive map</a>
+    <a href="$repo_url/blob/main/reports/writeup.md">Read the write-up</a>
+    <a href="$repo_url">Code on GitHub</a>
+  </nav>
+</header>
+
+<figure>
+  <img src="figures/hero_map.png" alt="Map of predicted PM2.5 over India, Pakistan, Bangladesh, Nepal and Sri Lanka, with monitoring stations as orange dots and the area more than 100 km from any station hatched" width="1720" height="1920">
+  <figcaption>Mean predicted PM2.5, March 2025 to June 2026, with the $n_stations monitoring stations. Hatched: more than 100&nbsp;km from any station. A model estimate: uncertain at single cells, best read as a pattern. The map stops at 93.4&deg;E.</figcaption>
+</figure>
+
+<section>
+  <h2>The monitors are far from many people</h2>
+  <p class="sub">The median populated cell is $median_km&nbsp;km from the nearest of the $n_stations stations.</p>
+  <div class="tiles">
+    <div class="tile"><div class="num">$people_50</div><div class="what">of people live more than 50&nbsp;km from a monitor</div></div>
+    <div class="tile"><div class="num">$people_100</div><div class="what">more than 100&nbsp;km away</div></div>
+    <div class="tile"><div class="num">$area_100</div><div class="what">of the land area of the five countries is more than 100&nbsp;km from a monitor</div></div>
+  </div>
+</section>
+
+<section>
+  <h2>Predicting a region the model has not seen is hard</h2>
+  <p class="sub">Scored on random folds, the same Random Forest reaches R&sup2;&nbsp;$r2_random. Scored the way the model will be used, holding out whole regions, it reaches R&sup2;&nbsp;$r2_spatial (RMSE $rmse_spatial&nbsp;&micro;g/m&sup3;). Random cross-validation more than doubles the apparent skill, because a held-out station usually has a training station a few kilometres away.</p>
+  <figure>
+    <img src="figures/cv_ladder.png" alt="Bar chart of cross-validated R squared: constant and nearest station below zero, inverse-distance weighting 0.12, Ridge, Random Forest 0.27 and XGBoost 0.25, with a line at 0.60 for the forest on random folds" width="1720" height="980" loading="lazy">
+    <figcaption>The satellite and weather features beat interpolating the nearest stations (paired test, t&nbsp;=&nbsp;$idw_t) and are as good with a simple Ridge regression as with a forest or XGBoost, so Ridge is the definitive model. Most of its skill is seasonal and meteorological.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>The poor live farther from monitors, mostly because they live outside cities</h2>
+  <p class="sub">People are split into five income groups with equal numbers of people, by the Relative Wealth Index.</p>
+  <div class="tiles">
+    <div class="tile"><div class="num">$poorest_25 vs $richest_25</div><div class="what">live more than 25&nbsp;km from a monitor: poorest fifth against richest fifth (gap $gap_25 points, 95% interval $gap_25_low to $gap_25_high)</div></div>
+    <div class="tile"><div class="num">$poorest_100 vs $richest_100</div><div class="what">more than 100&nbsp;km away (gap $gap_100 points); at 200&nbsp;km the groups are not distinguishable</div></div>
+    <div class="tile"><div class="num">$corr_plain &rarr; $corr_both</div><div class="what">rank correlation of distance and wealth, falling from $corr_plain to $corr_density controlling for population density and to $corr_both controlling for density and night-time light</div></div>
+  </div>
+  <figure>
+    <img src="figures/equity_desert_share.png" alt="Line chart: share of each income group living more than 25, 50, 100 and 200 kilometres from a station, falling from the poorest to the richest fifth" width="1720" height="1080" loading="lazy">
+  </figure>
+  <p class="note">The gap is real but mostly an urban-versus-rural gap: monitors are in dense, lit cities, and cities are richer than the countryside. A second income proxy (night-time light per person) shows gaps of the same sign whose intervals include zero. This is an association over 16 months, not a cause.</p>
+  <figure style="margin-top:16px">
+    <img src="figures/equity_gap.png" alt="Left: poorest-minus-richest gap in people living in the desert by distance threshold, for two income proxies, with 95 percent intervals. Right: rank correlation of distance to a station with wealth, shrinking towards zero when density and night light are controlled" width="2240" height="1040" loading="lazy">
+    <figcaption>Intervals come from a bootstrap over 3&deg; blocks of the map, because neighbouring cells are strongly correlated.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>Explore the map</h2>
+  <p class="sub">Predicted PM2.5, the stations, the area far from any station, and the 25 zones where a new monitor would cover the most exposure (predicted PM2.5 times population). <a href="map.html">Open it full screen.</a></p>
+  <iframe class="mapframe" src="map.html" title="Interactive map of predicted PM2.5, monitoring stations and the monitoring desert" loading="lazy"></iframe>
+</section>
+
+<section>
+  <h2>What not to over-read</h2>
+  <p class="sub">The model is useful as a pattern and a ranking, not as a precise concentration at one cell.</p>
+  <figure>
+    <img src="figures/uncertainty.png" alt="Left: share of held-out observations inside the 90 percent uncertainty band by spatial fold, with one fold well below 90 percent. Right: stacked bar showing the share of predicted cell-months with no, one or two, or three or more features outside the range of the stations" width="2240" height="960" loading="lazy">
+  </figure>
+  <ul>
+    <li><strong>One band does not fit every region.</strong> The 90% band holds $band_worst of observations in the most polluted fold (fold $worst_fold). It is not a calibrated interval.</li>
+    <li><strong>Much of the grid is unlike the stations.</strong> $out_of_range of predicted cell-months have three or more features outside the stations' range, where a linear model extrapolates.</li>
+    <li><strong>Validated at shorter distances than predicted over.</strong> Cross-validation tests transfer at about 90 to 230&nbsp;km from the nearest training station; the 90th percentile for populated cells is $cv_far_km&nbsp;km.</li>
+    <li><strong>Sanity checks mostly pass.</strong> The predicted seasonal cycle follows the observed one (correlation $season_r), and $spots_ok of $spots_n spot-checked places behave as expected. High-altitude Leh does not: the model has no elevation feature.</li>
+    <li><strong>Proxies and period.</strong> The wealth index and night light are proxies for income; the data cover March 2025 to June 2026, with March to June twice.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>How it works</h2>
+  <ol class="steps">
+    <li>Monthly PM2.5 from $n_stations OpenAQ stations ($n_station_months station-months).</li>
+    <li>Satellite NO2 and aerosol index (Sentinel-5P), ERA5 weather and the month, built for every one of $n_cells grid cells.</li>
+    <li>Spatial cross-validation: whole regions held out together, with the fold design checked against the distances the model is used at.</li>
+    <li>Baselines and models compared with paired tests; Ridge regression chosen as the simplest model in a tie.</li>
+    <li>Predictions with a residual band and two warning indicators, then desert and equity statistics with block-bootstrap intervals.</li>
+  </ol>
+</section>
+
+<footer>
+  <p><strong>More:</strong></p>
+  <ul>
+    <li><a href="$repo_url/blob/main/README.md">README</a> and <a href="$repo_url/blob/main/reports/writeup.md">full write-up</a></li>
+    <li>Methodology notes: <a href="$repo_url/blob/main/docs/methodology/spatial_cv.md">spatial cross-validation</a>, <a href="$repo_url/blob/main/docs/methodology/ridge_regression.md">Ridge regression</a>, <a href="$repo_url/blob/main/docs/methodology/uncertainty.md">uncertainty</a></li>
+    <li><a href="$repo_url/blob/main/docs/pipeline.md">Pipeline</a> and <a href="$repo_url/blob/main/docs/known_issues.md">known issues</a></li>
+  </ul>
+  <p>Data: OpenAQ, Copernicus Sentinel-5P and ERA5, WorldPop, Meta Relative Wealth Index (CC BY-NC 4.0, non-commercial), VIIRS night-time light, Natural Earth. No data is redistributed; see the README for terms. Code is MIT-licensed. Base maps: Esri and OpenStreetMap contributors.</p>
+</footer>
+</div>
+</body>
+</html>
+""")
+
+
+def build_landing_page(key, path, repo_url):
+    """Write the summary page.
+
+    Parameters:
+        key (dict): The contents of `reports/key_numbers.yaml`.
+        path (str | Path): Output HTML file.
+        repo_url (str): The repository URL, e.g. `https://github.com/user/monitoring-deserts`
+            (no trailing slash). The Pages address is derived from it.
+
+    Raises:
+        ValueError: If `repo_url` is not a github.com repository URL.
+        KeyError: If a number the page quotes is missing from `key`.
+    """
+    parts = repo_url.rstrip("/").split("/")
+    if len(parts) < 5 or parts[2] != "github.com":
+        raise ValueError(f"repo_url must look like https://github.com/<user>/<repo>, got {repo_url!r}")
+    pages_url = f"https://{parts[3]}.github.io/{parts[4]}"
+    values = headline_numbers(key)
+    html = PAGE.substitute(values, repo_url=repo_url.rstrip("/"), pages_url=pages_url)
+    Path(path).write_text(html, encoding="utf-8")

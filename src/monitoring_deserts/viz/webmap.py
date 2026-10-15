@@ -67,7 +67,7 @@ def _png_data_uri(rgba):
     return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
 
 
-def build_map(pm25, far_from_station, extent, stations, zones, path, desert_km, vmin, vmax, title, subtitle, repo_url=None):
+def build_map(pm25, far_from_station, extent, stations, zones, path, desert_km, vmin, vmax, title, subtitle, repo_url=None, home_url=None):
     """Write the interactive map to an HTML file.
 
     Parameters:
@@ -83,6 +83,7 @@ def build_map(pm25, far_from_station, extent, stations, zones, path, desert_km, 
         vmin, vmax (float): Colour scale limits of the PM2.5 layer.
         title, subtitle (str): Text of the box at the top left of the page.
         repo_url (str | None): Link shown in the box, if given.
+        home_url (str | None): Link back to the summary page, shown in the box if given.
 
     Raises:
         ValueError: If the two rasters differ in shape or `vmax` is not above `vmin`.
@@ -152,7 +153,12 @@ def build_map(pm25, far_from_station, extent, stations, zones, path, desert_km, 
     legend.add_to(fmap)
     folium.LayerControl(collapsed=False, position="topright").add_to(fmap)
 
-    link = f'<br><a href="{repo_url}" target="_blank" rel="noopener">Code and write-up</a>' if repo_url else ""
+    links = []
+    if home_url:
+        links.append(f'<a href="{home_url}" target="_top">&larr; Summary of the findings</a>')
+    if repo_url:
+        links.append(f'<a href="{repo_url}" target="_blank" rel="noopener">Code and write-up</a>')
+    link = "<br>" + " &middot; ".join(links) if links else ""
     box = f"""
     <div style="position: fixed; top: 10px; left: 55px; z-index: 9999; max-width: 340px; padding: 10px 14px;
                 background: rgba(252,252,251,0.94); border-radius: 6px; border: 1px solid #e1e0d9;
