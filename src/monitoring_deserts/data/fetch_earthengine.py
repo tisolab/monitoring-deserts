@@ -1,4 +1,6 @@
+import time
 import warnings
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pandas as pd
@@ -206,23 +208,35 @@ def pull_monthly_stats(
 
 
 def download_image_on_grid(
-    image, grid_lons, grid_lats, cell_size, tile_cells=200, max_source_pixels=1024, progress=True
+    image,
+    grid_lons,
+    grid_lats,
+    cell_size,
+    tile_cells=200,
+    max_source_pixels=1024,
+    progress=True,
+    reducer=None,
+    bands=None,
+    max_workers=1,
+    retries=0,
 ):
-    """Download an Earth Engine image averaged onto a regular grid, as a numpy array.
+    """Download an Earth Engine image reduced onto a regular grid, as a numpy array.
 
     For grid-cell features where `reduceRegions` doesn't scale (hundreds of
     thousands of cells) but the *output* is small: each cell's value is the
     mean of the source pixels inside it (`reduceResolution` with a mean
-    reducer, then a reprojection onto the grid), and the result comes back as
+    reducer by default, then a reprojection onto the grid), and the result comes back as
     small GeoTIFF downloads, one per tile, with no Drive export or waiting on
     an asynchronous task. Tiling keeps each request light enough not to hit
     Earth Engine's interactive compute and size limits.
 
     Parameters:
-        image (ee.Image): A single-band image with a fixed projection (e.g.
-            `collection.first().select("band")`). A composite such as
-            `collection.mean()` has no fixed projection and can't be
-            resampled this way.
+        image (ee.Image): An image with a fixed projection (e.g.
+            `collection.first().select("band")`); single-band unless `bands`
+            is given. A composite such as `collection.mean()` has no fixed
+            projection and can't be resampled this way, unless its native
+            projection is put back first with
+            `composite.setDefaultProjection(collection.first().projection())`.
         grid_lons (array-like): Ascending longitudes of the grid cell centres.
         grid_lats (array-like): Ascending latitudes of the grid cell centres.
         cell_size (float): Cell size in degrees (the grid must be regular).
@@ -231,19 +245,41 @@ def download_image_on_grid(
             cell. Defaults to 1024, ample for a ~500 m image on a 0.05 degree
             grid (about 144).
         progress (bool): Show a progress bar over the tiles. Defaults to True.
+        reducer (ee.Reducer | None): How the source pixels inside a cell are
+            combined. Defaults to `ee.Reducer.mean()`. A combined reducer such
+            as `ee.Reducer.mean().combine(ee.Reducer.stdDev(), sharedInputs=True)`
+            gives the cell mean and spread; it renames the bands to
+            `<band>_mean` and `<band>_stdDev`, so pass those names in `bands`.
+        bands (list[str] | None): Names of the bands of the REDUCED image to
+            download, in the order they should come back. `None` (default)
+            expects a single-band result and returns a 2-D array. A list
+            selects those bands explicitly, so the output order never depends
+            on Earth Engine's own band ordering, and returns a 3-D array.
+        max_workers (int): Tiles downloaded at the same time, in threads.
+            Defaults to 1 (one after the other). The time is almost all
+            Earth Engine compute, proportional to the number of cells, so
+            parallel requests cut the wall time roughly in proportion;
+            keep it well below Earth Engine's concurrent-request limit
+            (about 40 for interactive calls).
+        retries (int): Extra attempts for a tile whose request fails
+            (a transient Earth Engine or network error), waiting 5, 10, ...
+            seconds between attempts. Defaults to 0.
 
     Returns:
-        numpy.ndarray: Array of shape `(len(grid_lats), len(grid_lons))`,
-            float, NaN where the image has no data. Row 0 is the NORTHERNMOST
-            row (rasters are north-up), so latitude index `i` in ascending
-            `grid_lats` is row `len(grid_lats) - 1 - i`.
+        numpy.ndarray: Array of shape `(len(grid_lats), len(grid_lons))` if
+            `bands` is None, otherwise `(len(bands), len(grid_lats),
+            len(grid_lons))`; float, NaN where the image has no data. Row 0
+            is the NORTHERNMOST row (rasters are north-up), so latitude index
+            `i` in ascending `grid_lats` is row `len(grid_lats) - 1 - i`.
 
     Raises:
-        ValueError: If the grid axes are empty or not ascending, or
-            `cell_size`, `tile_cells` or `max_source_pixels` isn't positive.
+        ValueError: If the grid axes are empty or not ascending,
+            `cell_size`, `tile_cells` or `max_source_pixels` isn't positive,
+            `bands` isn't a non-empty list of unique strings, or `max_workers` isn't
+            a positive integer or `retries` a non-negative one.
         RuntimeError: If Earth Engine or the download fails for a tile, the
-            response isn't a single-band GeoTIFF, or a tile comes back with an
-            unexpected shape.
+            response doesn't have the expected number of bands, or a tile
+            comes back with an unexpected shape.
     """
     lons = np.asarray(grid_lons, dtype=float)
     lats = np.asarray(grid_lats, dtype=float)
@@ -253,53 +289,90 @@ def download_image_on_grid(
         raise ValueError("grid_lons and grid_lats must be strictly ascending.")
     if not (cell_size > 0 and tile_cells > 0 and max_source_pixels > 0):
         raise ValueError("cell_size, tile_cells and max_source_pixels must be positive.")
+    if bands is not None and (
+        not isinstance(bands, (list, tuple))
+        or len(bands) == 0
+        or not all(isinstance(b, str) for b in bands)
+        or len(set(bands)) != len(bands)
+    ):
+        raise ValueError(f"bands must be a non-empty list of unique band names, got {bands!r}.")
 
+    if not (isinstance(max_workers, int) and max_workers > 0 and isinstance(retries, int) and retries >= 0):
+        raise ValueError("max_workers must be a positive integer and retries a non-negative integer.")
+
+    n_bands = 1 if bands is None else len(bands)
     n_rows, n_cols = lats.size, lons.size
     left = lons[0] - cell_size / 2
     top = lats[-1] + cell_size / 2
 
     try:
         on_grid = image.reduceResolution(
-            reducer=ee.Reducer.mean(), maxPixels=max_source_pixels
+            reducer=ee.Reducer.mean() if reducer is None else reducer,
+            maxPixels=max_source_pixels,
         ).reproject(crs="EPSG:4326", crsTransform=[cell_size, 0, left, 0, -cell_size, top])
+        if bands is not None:
+            on_grid = on_grid.select(list(bands))
     except ee.EEException as exc:
         raise RuntimeError(f"Earth Engine rejected the resampling request: {exc}") from exc
 
-    out = np.full((n_rows, n_cols), np.nan)
+    out = np.full((n_bands, n_rows, n_cols), np.nan)
     tiles = [
         (r0, min(r0 + tile_cells, n_rows), c0, min(c0 + tile_cells, n_cols))
         for r0 in range(0, n_rows, tile_cells)
         for c0 in range(0, n_cols, tile_cells)
     ]
-    for r0, r1, c0, c1 in tqdm(tiles, desc="Grid tiles", disable=not progress):
+
+    def fetch_tile(tile_def):
+        r0, r1, c0, c1 = tile_def
         x0, y1 = left + c0 * cell_size, top - r0 * cell_size
         transform = [cell_size, 0, x0, 0, -cell_size, y1]
-        bounds = [x0, y1 - (r1 - r0) * cell_size, x0 + (c1 - c0) * cell_size, y1]
-        try:
-            url = on_grid.getDownloadURL(
-                {
-                    "name": "tile",
-                    "format": "GEO_TIFF",
-                    "region": ee.Geometry.Rectangle(bounds, proj="EPSG:4326", geodesic=False),
-                    "crs": "EPSG:4326",
-                    "crs_transform": transform,
-                }
-            )
-            response = requests.get(url, timeout=300)
-            response.raise_for_status()
-            with MemoryFile(response.content) as memfile, memfile.open() as src:
-                if src.count != 1:
-                    raise RuntimeError(f"expected a single-band image, got {src.count} bands")
-                tile = src.read(1, masked=True).astype(float).filled(np.nan)
-        except (ee.EEException, requests.RequestException, rasterio.errors.RasterioError) as exc:
-            raise RuntimeError(
-                f"Failed downloading grid tile rows {r0}-{r1}, cols {c0}-{c1}: {exc}"
-            ) from exc
-        if tile.shape != (r1 - r0, c1 - c0):
+        # The region is pulled in by a quarter cell on every side. Its edges would otherwise sit
+        # exactly on pixel edges, where float noise decides whether Earth Engine also returns the
+        # neighbouring pixel column/row (a tile one pixel too wide). Every cell centre stays inside.
+        inset = cell_size / 4
+        bounds = [
+            x0 + inset,
+            y1 - (r1 - r0) * cell_size + inset,
+            x0 + (c1 - c0) * cell_size - inset,
+            y1 - inset,
+        ]
+        for attempt in range(retries + 1):
+            try:
+                url = on_grid.getDownloadURL(
+                    {
+                        "name": "tile",
+                        "format": "GEO_TIFF",
+                        "region": ee.Geometry.Rectangle(bounds, proj="EPSG:4326", geodesic=False),
+                        "crs": "EPSG:4326",
+                        "crs_transform": transform,
+                    }
+                )
+                response = requests.get(url, timeout=300)
+                response.raise_for_status()
+                with MemoryFile(response.content) as memfile, memfile.open() as src:
+                    if src.count != n_bands:
+                        raise RuntimeError(f"expected {n_bands} band(s), got {src.count}")
+                    tile = src.read(masked=True).astype(float).filled(np.nan)
+                break
+            except (ee.EEException, requests.RequestException, rasterio.errors.RasterioError) as exc:
+                if attempt < retries:
+                    time.sleep(5 * (attempt + 1))
+                    continue
+                raise RuntimeError(
+                    f"Failed downloading grid tile rows {r0}-{r1}, cols {c0}-{c1}: {exc}"
+                ) from exc
+        if tile.shape != (n_bands, r1 - r0, c1 - c0):
             raise RuntimeError(
                 f"Tile rows {r0}-{r1}, cols {c0}-{c1} came back with shape {tile.shape}, "
-                f"expected {(r1 - r0, c1 - c0)}"
+                f"expected {(n_bands, r1 - r0, c1 - c0)}"
             )
-        out[r0:r1, c0:c1] = tile
+        return tile
 
-    return out
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        # map yields in tile order, so the progress bar and the first error follow the tile list
+        for (r0, r1, c0, c1), tile in zip(
+            tiles, tqdm(pool.map(fetch_tile, tiles), total=len(tiles), desc="Grid tiles", disable=not progress)
+        ):
+            out[:, r0:r1, c0:c1] = tile
+
+    return out[0] if bands is None else out
