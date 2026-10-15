@@ -1,0 +1,137 @@
+spot_check_value: calendar-balanced mean of the predicted PM2.5 (each calendar month
+  averaged over the years, then the 12 months averaged)
+seasonal_cycle_agreement:
+  months: 16
+  pearson: 0.9777277068285535
+  spearman: 0.9705882352941176
+spot_checks:
+- place: Delhi
+  expected: high
+  predicted_pm25: 56.3011589050293
+  band_low: 27.555038452148438
+  band_high: 118.87844848632812
+  percentile_among_populated: 0.99268542826366
+  distance_to_station_km: 2.5364056658312273
+  mean_features_out_of_range: 0.0625
+  consistent: true
+- place: Lahore
+  expected: high
+  predicted_pm25: 57.986328125
+  band_low: 28.394811630249023
+  band_high: 122.40396118164062
+  percentile_among_populated: 0.9966845768320293
+  distance_to_station_km: 2.2518427283884166
+  mean_features_out_of_range: 0.25
+  consistent: true
+- place: Lucknow
+  expected: high
+  predicted_pm25: 48.4239616394043
+  band_low: 23.62957191467285
+  band_high: 102.39875030517578
+  percentile_among_populated: 0.9037108228570692
+  distance_to_station_km: 2.335498374514467
+  mean_features_out_of_range: 0.0
+  consistent: true
+- place: Patna
+  expected: high
+  predicted_pm25: 46.26796340942383
+  band_low: 22.5551700592041
+  band_high: 97.88824462890625
+  percentile_among_populated: 0.8634484271090671
+  distance_to_station_km: 2.1211290635214346
+  mean_features_out_of_range: 0.25
+  consistent: true
+- place: Dhaka
+  expected: high
+  predicted_pm25: 50.94708251953125
+  band_low: 24.886926651000977
+  band_high: 107.67731475830078
+  percentile_among_populated: 0.9453213186869892
+  distance_to_station_km: 15.200507667611618
+  mean_features_out_of_range: 0.3125
+  consistent: true
+- place: Kolkata
+  expected: high
+  predicted_pm25: 44.59809875488281
+  band_low: 21.7230224609375
+  band_high: 94.3947525024414
+  percentile_among_populated: 0.8116207517109261
+  distance_to_station_km: 2.540849869896563
+  mean_features_out_of_range: 0.4375
+  consistent: true
+- place: Leh (Ladakh)
+  expected: low
+  predicted_pm25: 37.533390045166016
+  band_low: 18.20244789123535
+  band_high: 79.61483764648438
+  percentile_among_populated: 0.5399108576883631
+  distance_to_station_km: 256.1994411329751
+  mean_features_out_of_range: 3.75
+  consistent: false
+- place: Munnar (Western Ghats)
+  expected: low
+  predicted_pm25: 23.187393188476562
+  band_low: 11.053367614746094
+  band_high: 49.601898193359375
+  percentile_among_populated: 0.01432598221023911
+  distance_to_station_km: 96.37618406227101
+  mean_features_out_of_range: 1.9375
+  consistent: true
+- place: Nuwara Eliya (Sri Lanka)
+  expected: low
+  predicted_pm25: 21.05560874938965
+  band_low: 9.9910306930542
+  band_high: 45.14204406738281
+  percentile_among_populated: 0.005734263027871485
+  distance_to_station_km: 452.81876114774883
+  mean_features_out_of_range: 1.8125
+  consistent: true
+- place: Port Blair (Andaman)
+  expected: low
+  predicted_pm25: 26.67673683166504
+  band_low: 12.792222023010254
+  band_high: 56.90187454223633
+  percentile_among_populated: 0.0514019595827985
+  distance_to_station_km: 1209.1732344551758
+  mean_features_out_of_range: 2.5
+  consistent: true
+- place: Arabian Sea
+  expected: ocean
+  predicted_pm25: 34.88844299316406
+  band_low: 16.884382247924805
+  band_high: 74.0813980102539
+  percentile_among_populated: 0.4282636599949688
+  distance_to_station_km: 942.9818884926575
+  mean_features_out_of_range: 3.0
+  consistent: null
+validated_distance_km:
+  prediction cells (reality):
+    10th percentile (km): 28.7
+    25th percentile (km): 51.0
+    50th percentile (km): 90.8
+    75th percentile (km): 190.4
+    90th percentile (km): 374.7
+    closest (km): 0.1
+  random folds (over rows):
+    10th percentile (km): 0.0
+    25th percentile (km): 0.0
+    50th percentile (km): 0.0
+    75th percentile (km): 0.0
+    90th percentile (km): 0.0
+    closest (km): 0.0
+  spatial folds (GroupKFold):
+    10th percentile (km): 90.9
+    25th percentile (km): 106.1
+    50th percentile (km): 138.8
+    75th percentile (km): 183.7
+    90th percentile (km): 230.8
+    closest (km): 46.5
+out_of_range_share:
+  no feature outside (rows): 0.23525486273968824
+  1 or 2 features outside: 0.28612322964087
+  3 or more features outside: 0.4786219076194418
+grid_content:
+  n_cells: 434940
+  share_without_population: 0.6434220812066032
+  share_populated: 0.3564468662344231
+  stations: 343
