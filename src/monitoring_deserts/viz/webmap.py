@@ -104,7 +104,22 @@ def build_map(pm25, far_from_station, extent, stations, zones, path, desert_km, 
     veil[far_mercator & ~np.isnan(pm25_mercator)] = to_rgba("#0b0b0b", 0.30)
 
     centre = [(south + north) / 2, (west + east) / 2]
-    fmap = folium.Map(location=centre, zoom_start=5, min_zoom=4, tiles="CartoDB positron", control_scale=True)
+    fmap = folium.Map(location=centre, zoom_start=5, min_zoom=4, max_zoom=12, tiles=None, control_scale=True)
+    # Base maps that need no API key (CARTO's tiles now answer "API key required"). Place names are drawn
+    # in their own pane above the image layers, so they stay readable over the PM2.5 colours.
+    folium.TileLayer(
+        tiles="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+        attr="Tiles &copy; Esri &mdash; Esri, HERE, Garmin, FAO, NOAA, USGS", name="Light grey base map (Esri)", max_native_zoom=16, control=True,
+    ).add_to(fmap)
+    folium.TileLayer(
+        tiles="https://tile.openstreetmap.org/{z}/{x}/{y}.png", attr="&copy; OpenStreetMap contributors", name="OpenStreetMap",
+        max_native_zoom=19, show=False, control=True,
+    ).add_to(fmap)
+    folium.map.CustomPane("place_names", z_index=650, pointer_events=False).add_to(fmap)
+    folium.TileLayer(
+        tiles="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+        attr="Labels &copy; Esri", name="Place names", overlay=True, control=True, max_native_zoom=16, pane="place_names",
+    ).add_to(fmap)
     bounds = [[south, west], [north, east]]
     folium.raster_layers.ImageOverlay(
         image=_png_data_uri(rgba), bounds=bounds, opacity=0.88, name="Predicted PM2.5 (mean, µg/m³)", interactive=False, zindex=2,

@@ -56,6 +56,7 @@ def test_build_map_writes_a_self_contained_html_page(tmp_path, toy_inputs):
     webmap.build_map(shown, distance > 100, extent, stations, zones, path, 100, 20, 60, "Title", "Subtitle", repo_url="https://example.org")
     html = path.read_text()
     assert "data:image/png;base64," in html and "Station a" in html and "Rank 1" in html and "https://example.org" in html
+    assert "arcgisonline" in html and "tile.openstreetmap.org" in html and "cartocdn" not in html  # base maps that need no API key
     with pytest.raises(ValueError):
         webmap.build_map(shown, (distance > 100)[:5], extent, stations, zones, path, 100, 20, 60, "T", "S")
     with pytest.raises(ValueError):
