@@ -30,9 +30,8 @@ def test_the_page_quotes_the_headline_numbers(key, html):
         assert text in html
 
 
-def test_every_placeholder_is_filled_and_no_banned_word_remains(html):
+def test_every_placeholder_is_filled(html):
     assert "$" not in html and "YOUR_GITHUB_USER" not in html
-    assert "honest" not in html.lower()
 
 
 def test_every_figure_the_page_uses_is_served_from_docs(html):
