@@ -1,0 +1,67 @@
+route: fetch_earthengine.download_image_on_grid, monthly mean composite with the source
+  projection restored (setDefaultProjection), mean and standard deviation of the source
+  pixels in each cell
+source_pixel_scale_m: 1000
+grid_cell_size_deg: 0.05
+image_collections:
+  no2: COPERNICUS/S5P/OFFL/L3_NO2:tropospheric_NO2_column_number_density
+  aai: COPERNICUS/S5P/OFFL/L3_AER_AI:absorbing_aerosol_index
+months:
+- 2025-03
+- 2025-04
+- 2025-05
+- 2025-06
+- 2025-07
+- 2025-08
+- 2025-09
+- 2025-10
+- 2025-11
+- 2025-12
+- 2026-01
+- 2026-02
+- 2026-03
+- 2026-04
+- 2026-05
+- 2026-06
+n_cells: 434940
+n_rows: 6959040
+share_missing:
+  no2: 0.0
+  aai: 0.0
+model_features:
+- no2
+- aai
+- total_precipitation
+- temperature
+- dew_point
+- u_wind
+- v_wind
+- wind_magnitude
+- boundary_layer_height
+- surface_pressure
+- relative_humidity
+- sin_month
+- cos_month
+model_features_share_missing:
+  no2: 0.0
+  aai: 0.0
+  total_precipitation: 0.0
+  temperature: 0.0
+  dew_point: 0.0
+  u_wind: 0.0
+  v_wind: 0.0
+  wind_magnitude: 0.0
+  boundary_layer_height: 0.0
+  surface_pressure: 0.0
+  relative_humidity: 0.0
+  sin_month: 0.0
+  cos_month: 0.0
+rows_complete_for_model: 6959040
+files:
+  grid_satellite: /home/tom/datascience/projects/monitoring_deserts/data/clean/satellite/grid_satellite.parquet
+  master_grid: /home/tom/datascience/projects/monitoring_deserts/data/processed/master_grid_df.parquet
+  raw_arrays: /home/tom/datascience/projects/monitoring_deserts/data/raw/satellite/grid
+library_versions:
+  earthengine-api: 1.7.41
+  numpy: 2.4.6
+  pandas: 3.0.5
