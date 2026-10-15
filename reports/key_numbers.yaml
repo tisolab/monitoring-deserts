@@ -23,6 +23,39 @@ baseline_ladder_pooled_r2:
   Ridge (same features): 0.2741
   Random Forest: 0.2678
   XGBoost: 0.2512
+paired_forest_vs_baselines:
+  constant (training mean):
+    n_folds: 8
+    mean_diff: -5.5255
+    std_diff: 3.109100971955955
+    std_err: 1.0992
+    t_stat: -5.0266
+    n_folds_a_better: 8.0
+    verdict: Random Forest clearly better
+  nearest station (k=1):
+    n_folds: 8
+    mean_diff: -6.0706
+    std_diff: 3.3403774425740695
+    std_err: 1.181
+    t_stat: -5.1402
+    n_folds_a_better: 7.0
+    verdict: Random Forest clearly better
+  IDW of 5 nearest stations:
+    n_folds: 8
+    mean_diff: -2.4172
+    std_diff: 2.037223769053671
+    std_err: 0.7203
+    t_stat: -3.356
+    n_folds_a_better: 7.0
+    verdict: Random Forest clearly better
+  Ridge (same features):
+    n_folds: 8
+    mean_diff: -0.2045
+    std_diff: 1.4361909419191976
+    std_err: 0.5078
+    t_stat: -0.4027
+    n_folds_a_better: 3.0
+    verdict: no clear difference
 ridge:
   best_alpha: 0.01
   alpha_at_grid_edge: true

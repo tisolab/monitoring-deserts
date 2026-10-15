@@ -8,7 +8,9 @@ Run after the notebooks have produced their outputs (it reads `data/` and `confi
 Writes:
     reports/figures/*.png     the figures used in README.md and reports/writeup.md
     reports/key_numbers.yaml  every number quoted in those documents, read from the saved metadata
-    docs/index.html           the interactive map served by GitHub Pages
+    docs/index.html           the summary page served by GitHub Pages
+    docs/map.html             the interactive map (also previewed on the summary page)
+    docs/figures/*.png        copies of the figures, so the summary page can serve them
 
 The maps show the five countries with population data (India, Pakistan, Bangladesh, Nepal and
 Sri Lanka), masked with Natural Earth boundaries; the analysis grid itself covers the whole
@@ -16,6 +18,7 @@ bounding box of the study region.
 """
 
 import argparse
+import shutil
 from pathlib import Path
 
 import geopandas as gpd
@@ -25,7 +28,7 @@ import yaml
 
 from monitoring_deserts.data import fetch_boundaries
 from monitoring_deserts.features import deserts
-from monitoring_deserts.viz import figures, webmap
+from monitoring_deserts.viz import figures, landing, webmap
 
 ROOT = Path(__file__).resolve().parents[1]
 NOTEBOOK_DIR = ROOT / "noteboox"  # the paths of project_config.yaml are relative to this folder
@@ -167,10 +170,11 @@ def main(repo_url):
     # --- interactive map
     zones = pd.read_parquet(clean / "equity" / "desert_zones_ranked.parquet").head(25)
     low, high = np.nanquantile(np.where(study, pm25, np.nan), [0.02, 0.98])
+    pages_url = "https://{}.github.io/{}/".format(*repo_url.rstrip("/").split("/")[3:5])
     webmap.build_map(
-        np.where(study, pm25, np.nan), study & (distance > DESERT_KM), extent, stations, zones, docs_dir / "index.html", DESERT_KM, low, high,
+        np.where(study, pm25, np.nan), study & (distance > DESERT_KM), extent, stations, zones, docs_dir / "map.html", DESERT_KM, low, high,
         title=PAGE_TITLE, subtitle="Predicted PM2.5 (March 2025 to June 2026), the 343 monitoring stations, and the zones where a new monitor would cover the most exposure.",
-        repo_url=repo_url,
+        repo_url=repo_url, home_url=pages_url,
     )
 
     # --- key numbers, each read from a saved metadata file
@@ -183,6 +187,7 @@ def main(repo_url):
         },
         "cross_validation": {"spatial": model["headline_metrics_ugm3"]["spatial_folds"], "random": model["headline_metrics_ugm3"]["random_folds"]},
         "baseline_ladder_pooled_r2": metrics,
+        "paired_forest_vs_baselines": model["baseline_ladder"]["paired_rmse_forest_minus_baseline"],
         "ridge": {"best_alpha": definitive["best_alpha"], "alpha_at_grid_edge": definitive["alpha_at_grid_edge"], "paired_rmse_ridge_minus_forest": definitive["paired_rmse_ridge_minus_forest"]},
         "coefficients_log1p": definitive["standardised_coefficients_log1p"],
         "desert_study_area": mask_summary.round(4).to_dict(orient="records"),
@@ -197,6 +202,12 @@ def main(repo_url):
     }
     with open(ROOT / "reports" / "key_numbers.yaml", "w") as f:
         yaml.safe_dump(key, f, sort_keys=False)
+
+    # --- the summary page, with copies of the figures it shows
+    (docs_dir / "figures").mkdir(exist_ok=True)
+    for name in landing.FIGURES:
+        shutil.copy(figure_dir / name, docs_dir / "figures" / name)
+    landing.build_landing_page(key, docs_dir / "index.html", repo_url)
     print("Wrote", *sorted(p.name for p in figure_dir.glob("*.png")), "reports/key_numbers.yaml docs/index.html")
 
 
