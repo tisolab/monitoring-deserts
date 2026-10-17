@@ -71,6 +71,7 @@ def main(repo_url):
     period_label = f"{period_start.strftime('%B %Y')} to {period_end.strftime('%B %Y')}"
     n_months = int(monthly["month"].nunique())
     balanced = monthly.groupby(["cell_id", "month_of_year"])["predicted_pm25"].mean().groupby("cell_id").mean().rename("pm25")
+    monthly_pivot = monthly.pivot(index="cell_id", columns="month", values="predicted_pm25")  # one column per month, for the month selector
     del monthly  # each calendar month averaged over the years, then the 12 months averaged
     cells = grid.merge(population, on="cell_id").merge(status, on="cell_id").merge(balanced, on="cell_id", how="left")
 
@@ -100,6 +101,10 @@ def main(repo_url):
     pm25 = northup(raster(cells["pm25"].to_numpy()))
     distance = northup(raster(cells["distance_to_station_km"].to_numpy()))
     study = northup(mask)
+    month_rasters = {  # predicted PM2.5 of each month, labelled for the selector on the map
+        month.strftime("%B %Y"): np.where(study, northup(raster(monthly_pivot[month].reindex(cells["cell_id"]).to_numpy())), np.nan)
+        for month in monthly_pivot.columns
+    }
 
     station_months = pd.read_parquet(processed / "master_station_df.parquet", columns=["station_id", "longitude", "latitude", "pm25"])
     stations = (
@@ -173,12 +178,12 @@ def main(repo_url):
 
     # --- interactive map
     zones = pd.read_parquet(clean / "equity" / "desert_zones_ranked.parquet").head(25)
-    low, high = np.nanquantile(np.where(study, pm25, np.nan), [0.02, 0.98])
+    low, high = np.nanquantile(np.stack(list(month_rasters.values())), [0.02, 0.98])  # one colour scale for every month
     pages_url = "https://{}.github.io/{}/".format(*repo_url.rstrip("/").split("/")[3:5])
     webmap.build_map(
         np.where(study, pm25, np.nan), study & (distance > DESERT_KM), extent, stations, zones, docs_dir / "map.html", DESERT_KM, low, high,
         title=PAGE_TITLE, subtitle="Predicted PM2.5, the 343 monitoring stations, and the zones where a new monitor would cover the most exposure.",
-        repo_url=repo_url, home_url=pages_url, period_label=period_label,
+        repo_url=repo_url, home_url=pages_url, period_label=period_label, monthly=month_rasters,
     )
 
     # --- key numbers, each read from a saved metadata file

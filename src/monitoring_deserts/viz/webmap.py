@@ -13,11 +13,13 @@ regular in Mercator y. Without that, features would be off by up to about 50 km 
 
 import base64
 import io
+import json
 
 import branca.colormap as bcm
 import folium
 import matplotlib.image as mpimg
 import numpy as np
+from PIL import Image
 from matplotlib.colors import to_rgba
 
 from monitoring_deserts.viz.figures import MAP_RAMP, ORANGE, sequential_cmap
@@ -61,13 +63,73 @@ def to_web_mercator_rows(raster, north, south):
     return raster[source_rows]
 
 
-def _png_data_uri(rgba):
+def _png_data_uri(rgba, colours=None):
+    """A PNG data URI of an RGBA float array. With `colours`, the image is reduced to a palette of that size
+    (the colour ramp is smooth, so little is lost) to keep the many month frames small."""
     buffer = io.BytesIO()
-    mpimg.imsave(buffer, rgba, format="png")
+    if colours:
+        image = Image.fromarray((np.clip(rgba, 0, 1) * 255).astype(np.uint8), "RGBA")
+        image.quantize(colors=colours, method=Image.Quantize.FASTOCTREE).save(buffer, format="PNG", optimize=True)
+    else:
+        mpimg.imsave(buffer, rgba, format="png")
     return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
 
 
-def build_map(pm25, far_from_station, extent, stations, zones, path, desert_km, vmin, vmax, title, subtitle, repo_url=None, home_url=None, period_label=None):
+MONTH_CONTROL_CSS = """
+<style>
+  .month-control { background: rgba(252,252,251,0.96); border: 1px solid #e1e0d9; border-radius: 6px; padding: 8px 10px;
+                   width: 270px; font: 13px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif; color: #0b0b0b; margin-bottom: 26px !important; }
+  .month-control .mc-title { font-weight: 700; margin-bottom: 4px; }
+  .month-control .mc-row { display: flex; gap: 6px; align-items: center; }
+  .month-control select { flex: 1; padding: 4px; font: inherit; }
+  .month-control button { padding: 3px 9px; font: inherit; cursor: pointer; }
+  .month-control input[type=range] { width: 100%; margin: 8px 0 2px; }
+  .month-control .mc-note { color: #52514e; font-size: 12px; }
+</style>"""
+
+MONTH_CONTROL_JS = """
+// Runs after the page has loaded: folium writes the map's own script after this one, so the map does not exist before then.
+window.addEventListener("load", function () {
+  var map = __MAP__, overlay = __OVERLAY__, frames = __FRAMES__, last = frames.length - 1;
+  var average = frames[0].label;
+  var control = L.control({position: "bottomleft"});
+  control.onAdd = function () {
+    var div = L.DomUtil.create("div", "month-control");
+    div.innerHTML = '<div class="mc-title">Prediction month</div>' +
+      '<div class="mc-row"><button type="button" id="mc-prev" aria-label="Previous month">&#9664;</button>' +
+      '<select id="mc-select" aria-label="Prediction month"></select>' +
+      '<button type="button" id="mc-next" aria-label="Next month">&#9654;</button></div>' +
+      '<input type="range" id="mc-range" min="1" max="' + last + '" step="1" value="' + last + '" aria-label="Prediction month slider">' +
+      '<div class="mc-note" id="mc-note"></div>';
+    L.DomEvent.disableClickPropagation(div);
+    L.DomEvent.disableScrollPropagation(div);
+    return div;
+  };
+  control.addTo(map);
+  var select = document.getElementById("mc-select"), range = document.getElementById("mc-range"),
+      note = document.getElementById("mc-note"), heading = document.getElementById("period-note");
+  frames.forEach(function (f, i) { var o = document.createElement("option"); o.value = i; o.textContent = f.label; select.appendChild(o); });
+  function show(i) {
+    i = Math.max(0, Math.min(last, i));
+    overlay.setUrl(frames[i].uri);
+    select.value = i;
+    if (i >= 1) { range.value = i; }
+    var text = i === 0
+      ? "Average of the " + last + " monthly predictions, each season weighted equally."
+      : "Model estimate for " + frames[i].label + ", from that month's satellite and weather data.";
+    note.textContent = text + " Historical, not a live reading and not a forecast.";
+    if (heading) { heading.innerHTML = "Showing: <b>" + frames[i].label + "</b>"; }
+  }
+  select.addEventListener("change", function () { show(parseInt(select.value, 10)); });
+  range.addEventListener("input", function () { show(parseInt(range.value, 10)); });
+  document.getElementById("mc-prev").addEventListener("click", function () { var i = parseInt(select.value, 10); show(i <= 1 ? 1 : i - 1); });
+  document.getElementById("mc-next").addEventListener("click", function () { var i = parseInt(select.value, 10); show(i < 1 ? 1 : i + 1); });
+  show(0);
+});
+"""
+
+
+def build_map(pm25, far_from_station, extent, stations, zones, path, desert_km, vmin, vmax, title, subtitle, repo_url=None, home_url=None, period_label=None, monthly=None):
     """Write the interactive map to an HTML file.
 
     Parameters:
@@ -87,9 +149,14 @@ def build_map(pm25, far_from_station, extent, stations, zones, path, desert_km, 
         period_label (str | None): The period the predictions describe, e.g. "March 2025 to June 2026". If given,
             it is shown in a highlighted note in the title box, in the layer name and in the colour legend, together
             with the reminder that the map is a historical average and not a live reading or a forecast.
+        monthly (dict | None): Month label (for example "March 2025") to a 2-D north-up raster of that month's
+            predicted PM2.5, in chronological order, same shape as `pm25`. If given, the map gets a month selector
+            (drop-down, slider and previous/next buttons) that swaps the PM2.5 image, with "All months (average)"
+            (the `pm25` raster) as the first and default choice; `vmin` and `vmax` then apply to every frame so the
+            colours are comparable between months.
 
     Raises:
-        ValueError: If the two rasters differ in shape or `vmax` is not above `vmin`.
+        ValueError: If the rasters differ in shape or `vmax` is not above `vmin`.
     """
     pm25 = np.asarray(pm25, dtype=float)
     far = np.asarray(far_from_station, dtype=bool)
@@ -97,17 +164,28 @@ def build_map(pm25, far_from_station, extent, stations, zones, path, desert_km, 
         raise ValueError("pm25 and far_from_station must have the same shape.")
     if not vmax > vmin:
         raise ValueError("vmax must be above vmin.")
+    if monthly is not None and any(np.asarray(r).shape != pm25.shape for r in monthly.values()):
+        raise ValueError("Every monthly raster must have the same shape as pm25.")
     west, east, south, north = extent
 
     in_period = f" in {period_label}" if period_label else ""
-    pm25_layer_name = f"Predicted PM2.5, mean {period_label} (µg/m³)" if period_label else "Predicted PM2.5 (mean, µg/m³)"
-    legend_caption = f"Mean predicted PM2.5, {period_label} (µg/m³)" if period_label else "Mean predicted PM2.5 (µg/m³)"
+    if monthly:
+        pm25_layer_name = "Predicted PM2.5, selected month (µg/m³)"
+        legend_caption = "Predicted PM2.5 (µg/m³), the same scale for every month"
+    else:
+        pm25_layer_name = f"Predicted PM2.5, mean {period_label} (µg/m³)" if period_label else "Predicted PM2.5 (mean, µg/m³)"
+        legend_caption = f"Mean predicted PM2.5, {period_label} (µg/m³)" if period_label else "Mean predicted PM2.5 (µg/m³)"
 
     pm25_mercator = to_web_mercator_rows(pm25, north, south)
     far_mercator = to_web_mercator_rows(far, north, south)
     cmap = sequential_cmap()
-    rgba = cmap(np.clip((pm25_mercator - vmin) / (vmax - vmin), 0, 1))
-    rgba[np.isnan(pm25_mercator)] = (0, 0, 0, 0)
+
+    def colour(raster_mercator):
+        rgba = cmap(np.clip((raster_mercator - vmin) / (vmax - vmin), 0, 1))
+        rgba[np.isnan(raster_mercator)] = (0, 0, 0, 0)
+        return rgba
+
+    rgba = colour(pm25_mercator)
     veil = np.zeros(far_mercator.shape + (4,))
     veil[far_mercator & ~np.isnan(pm25_mercator)] = to_rgba("#0b0b0b", 0.30)
 
@@ -129,9 +207,10 @@ def build_map(pm25, far_from_station, extent, stations, zones, path, desert_km, 
         attr="Labels &copy; Esri", name="Place names", overlay=True, control=True, max_native_zoom=16, pane="place_names",
     ).add_to(fmap)
     bounds = [[south, west], [north, east]]
-    folium.raster_layers.ImageOverlay(
-        image=_png_data_uri(rgba), bounds=bounds, opacity=0.88, name=pm25_layer_name, interactive=False, zindex=2,
-    ).add_to(fmap)
+    pm25_overlay = folium.raster_layers.ImageOverlay(
+        image=_png_data_uri(rgba, colours=128 if monthly else None), bounds=bounds, opacity=0.88, name=pm25_layer_name, interactive=False, zindex=2,
+    )
+    pm25_overlay.add_to(fmap)
     folium.raster_layers.ImageOverlay(
         image=_png_data_uri(veil), bounds=bounds, opacity=1.0, name=f"Shaded: more than {desert_km:g} km from a station",
         interactive=False, zindex=3, show=True,
@@ -166,12 +245,19 @@ def build_map(pm25, far_from_station, extent, stations, zones, path, desert_km, 
     if repo_url:
         links.append(f'<a href="{repo_url}" target="_blank" rel="noopener">Code and write-up</a>')
     link = "<br>" + " &middot; ".join(links) if links else ""
-    note = (
-        '<div style="margin-top: 8px; padding: 6px 9px; background: #fff3ec; border: 1px solid #eb6834; border-radius: 4px; font-size: 12px;">'
-        f"Period shown: <b>{period_label}</b>. An average of the monthly predictions, with each season weighted equally: "
-        "historical, not a live reading and not a forecast.</div>"
-        if period_label else ""
-    )
+    if monthly:
+        note = (
+            '<div style="margin-top: 8px; padding: 6px 9px; background: #fff3ec; border: 1px solid #eb6834; border-radius: 4px; font-size: 12px;">'
+            f'<span id="period-note"></span><br>Choose a month from {list(monthly)[0]} to {list(monthly)[-1]} with the selector at the bottom left. '
+            "Historical model estimates, not live readings and not forecasts.</div>"
+        )
+    else:
+        note = (
+            '<div style="margin-top: 8px; padding: 6px 9px; background: #fff3ec; border: 1px solid #eb6834; border-radius: 4px; font-size: 12px;">'
+            f"Period shown: <b>{period_label}</b>. An average of the monthly predictions, with each season weighted equally: "
+            "historical, not a live reading and not a forecast.</div>"
+            if period_label else ""
+        )
     box = f"""
     <div style="position: fixed; top: 10px; left: 55px; z-index: 9999; max-width: 340px; padding: 10px 14px;
                 background: rgba(252,252,251,0.94); border-radius: 6px; border: 1px solid #e1e0d9;
@@ -181,4 +267,12 @@ def build_map(pm25, far_from_station, extent, stations, zones, path, desert_km, 
     </div>"""
     fmap.get_root().html.add_child(folium.Element(box))
     fmap.get_root().header.add_child(folium.Element(f"<title>{title}</title>"))
+    if monthly:
+        frames = [{"label": "All months (average)", "uri": _png_data_uri(rgba, colours=128)}]
+        for label, raster in monthly.items():
+            frames.append({"label": label, "uri": _png_data_uri(colour(to_web_mercator_rows(np.asarray(raster, dtype=float), north, south)), colours=128)})
+        fmap.get_root().header.add_child(folium.Element(MONTH_CONTROL_CSS))
+        script = (MONTH_CONTROL_JS.replace("__MAP__", fmap.get_name()).replace("__OVERLAY__", pm25_overlay.get_name())
+                  .replace("__FRAMES__", json.dumps(frames)))
+        fmap.get_root().script.add_child(folium.Element(script))
     fmap.save(str(path))

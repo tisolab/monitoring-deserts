@@ -60,5 +60,20 @@ def test_build_map_writes_a_self_contained_html_page(tmp_path, toy_inputs):
     assert "Period shown: <b>March 2025 to June 2026</b>" in html and "not a live reading" in html and "mean March 2025 to June 2026" in html
     with pytest.raises(ValueError):
         webmap.build_map(shown, (distance > 100)[:5], extent, stations, zones, path, 100, 20, 60, "T", "S")
+    with pytest.raises(ValueError):  # a monthly raster of the wrong shape
+        webmap.build_map(shown, distance > 100, extent, stations, zones, path, 100, 20, 60, "T", "S", monthly={"March 2025": shown[:5]})
     with pytest.raises(ValueError):
         webmap.build_map(shown, distance > 100, extent, stations, zones, path, 100, 60, 20, "T", "S")
+
+
+def test_build_map_with_months_adds_a_selector_and_one_frame_per_month(tmp_path, toy_inputs):
+    pm25, distance, mask, stations, zones, _, extent = toy_inputs
+    shown = np.where(mask, pm25, np.nan)
+    months = {"March 2025": shown, "April 2025": shown * 1.2, "May 2025": shown * 0.8}
+    path = tmp_path / "map.html"
+    webmap.build_map(shown, distance > 100, extent, stations, zones, path, 100, 10, 80, "Title", "Subtitle", period_label="March 2025 to May 2025", monthly=months)
+    html = path.read_text()
+    assert 'id="mc-select"' in html and 'id="mc-range"' in html and 'id="period-note"' in html
+    assert "All months (average)" in html and "March 2025" in html and "May 2025" in html
+    assert html.count("data:image/png;base64,") >= 4 + 1  # the average, three months, and the shaded layer
+    assert "not a live reading" in html and "same scale for every month" in html

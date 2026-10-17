@@ -185,7 +185,7 @@ PAGE = Template("""<!doctype html>
 
 <section>
   <h2>Explore the map</h2>
-  <p class="sub">Predicted PM2.5 averaged over $period, the stations, the area far from any station, and the 25 zones where a new monitor would cover the most exposure (predicted PM2.5 times population). These are historical averages of monthly predictions, not live readings or a forecast. <a href="map.html">Open it full screen.</a></p>
+  <p class="sub">Choose any month of $period with the selector at the bottom left of the map, or view the average of all months. The map also shows the stations, the area far from any station, and the 25 zones where a new monitor would cover the most exposure (predicted PM2.5 times population). The predictions are historical model estimates, not live readings or a forecast. <a href="map.html">Open it full screen.</a></p>
   <iframe class="mapframe" src="map.html" title="Interactive map of predicted PM2.5, monitoring stations and the monitoring desert" loading="lazy"></iframe>
 </section>
 
