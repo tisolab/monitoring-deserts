@@ -66,6 +66,10 @@ def main(repo_url):
     status = pd.read_parquet(processed / "cell_monitoring_status.parquet", columns=["cell_id", "distance_to_station_km"])
     monthly = pd.read_parquet(processed / "grid_predictions.parquet", columns=["cell_id", "month", "predicted_pm25"])
     monthly["month_of_year"] = monthly["month"].dt.month
+    # The period the predictions describe, read from the data (not typed in)
+    period_start, period_end = monthly["month"].min(), monthly["month"].max()
+    period_label = f"{period_start.strftime('%B %Y')} to {period_end.strftime('%B %Y')}"
+    n_months = int(monthly["month"].nunique())
     balanced = monthly.groupby(["cell_id", "month_of_year"])["predicted_pm25"].mean().groupby("cell_id").mean().rename("pm25")
     del monthly  # each calendar month averaged over the years, then the 12 months averaged
     cells = grid.merge(population, on="cell_id").merge(status, on="cell_id").merge(balanced, on="cell_id", how="left")
@@ -119,7 +123,7 @@ def main(repo_url):
     figures.hero_map(
         pm25, distance, study, stations, countries, extent, DESERT_KM, figure_dir / "hero_map.png",
         title="Where the monitors are, and where they are not",
-        subtitle="Mean predicted PM2.5, March 2025 to June 2026. A model estimate: uncertain at single cells, and best read as a pattern.",
+        subtitle=f"Mean predicted PM2.5, {period_label} (a historical average, not a live reading). A model estimate: uncertain at single cells, and best read as a pattern.",
     )
 
     ladder = model["baseline_ladder"]["metrics_ugm3"]
@@ -173,8 +177,8 @@ def main(repo_url):
     pages_url = "https://{}.github.io/{}/".format(*repo_url.rstrip("/").split("/")[3:5])
     webmap.build_map(
         np.where(study, pm25, np.nan), study & (distance > DESERT_KM), extent, stations, zones, docs_dir / "map.html", DESERT_KM, low, high,
-        title=PAGE_TITLE, subtitle="Predicted PM2.5 (March 2025 to June 2026), the 343 monitoring stations, and the zones where a new monitor would cover the most exposure.",
-        repo_url=repo_url, home_url=pages_url,
+        title=PAGE_TITLE, subtitle="Predicted PM2.5, the 343 monitoring stations, and the zones where a new monitor would cover the most exposure.",
+        repo_url=repo_url, home_url=pages_url, period_label=period_label,
     )
 
     # --- key numbers, each read from a saved metadata file
@@ -182,7 +186,7 @@ def main(repo_url):
     key = {
         "sources": "configs/*.yaml written by notebooks 09-14; area shares recomputed over the study-country mask by this script",
         "data": {
-            "n_stations": model["n_stations"], "n_station_months": model["n_data_points"], "n_months": len(predictions_meta.get("months", [])) or 16,
+            "n_stations": model["n_stations"], "n_station_months": model["n_data_points"], "n_months": n_months, "period": period_label,
             "n_cells": desert_meta["n_cells"], "n_cells_study_area": int(in_mask.sum()), "grid_cell_size_deg": cell_size,
         },
         "cross_validation": {"spatial": model["headline_metrics_ugm3"]["spatial_folds"], "random": model["headline_metrics_ugm3"]["random_folds"]},

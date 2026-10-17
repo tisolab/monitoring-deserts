@@ -53,10 +53,11 @@ def test_build_map_writes_a_self_contained_html_page(tmp_path, toy_inputs):
     pm25, distance, mask, stations, zones, _, extent = toy_inputs
     shown = np.where(mask, pm25, np.nan)
     path = tmp_path / "map.html"
-    webmap.build_map(shown, distance > 100, extent, stations, zones, path, 100, 20, 60, "Title", "Subtitle", repo_url="https://example.org", home_url="https://example.org/home/")
+    webmap.build_map(shown, distance > 100, extent, stations, zones, path, 100, 20, 60, "Title", "Subtitle", repo_url="https://example.org", home_url="https://example.org/home/", period_label="March 2025 to June 2026")
     html = path.read_text()
     assert "data:image/png;base64," in html and "Station a" in html and "Rank 1" in html and "https://example.org" in html and "https://example.org/home/" in html
     assert "arcgisonline" in html and "tile.openstreetmap.org" in html and "cartocdn" not in html  # base maps that need no API key
+    assert "Period shown: <b>March 2025 to June 2026</b>" in html and "not a live reading" in html and "mean March 2025 to June 2026" in html
     with pytest.raises(ValueError):
         webmap.build_map(shown, (distance > 100)[:5], extent, stations, zones, path, 100, 20, 60, "T", "S")
     with pytest.raises(ValueError):

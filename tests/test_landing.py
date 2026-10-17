@@ -30,6 +30,10 @@ def test_the_page_quotes_the_headline_numbers(key, html):
         assert text in html
 
 
+def test_the_period_of_the_predictions_is_stated_and_not_presented_as_live(key, html):
+    assert key["data"]["period"] in html and "not a live reading" in html
+
+
 def test_every_placeholder_is_filled(html):
     assert "$" not in html and "YOUR_GITHUB_USER" not in html
 

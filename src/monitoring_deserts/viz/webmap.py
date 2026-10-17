@@ -67,7 +67,7 @@ def _png_data_uri(rgba):
     return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
 
 
-def build_map(pm25, far_from_station, extent, stations, zones, path, desert_km, vmin, vmax, title, subtitle, repo_url=None, home_url=None):
+def build_map(pm25, far_from_station, extent, stations, zones, path, desert_km, vmin, vmax, title, subtitle, repo_url=None, home_url=None, period_label=None):
     """Write the interactive map to an HTML file.
 
     Parameters:
@@ -84,6 +84,9 @@ def build_map(pm25, far_from_station, extent, stations, zones, path, desert_km, 
         title, subtitle (str): Text of the box at the top left of the page.
         repo_url (str | None): Link shown in the box, if given.
         home_url (str | None): Link back to the summary page, shown in the box if given.
+        period_label (str | None): The period the predictions describe, e.g. "March 2025 to June 2026". If given,
+            it is shown in a highlighted note in the title box, in the layer name and in the colour legend, together
+            with the reminder that the map is a historical average and not a live reading or a forecast.
 
     Raises:
         ValueError: If the two rasters differ in shape or `vmax` is not above `vmin`.
@@ -95,6 +98,10 @@ def build_map(pm25, far_from_station, extent, stations, zones, path, desert_km, 
     if not vmax > vmin:
         raise ValueError("vmax must be above vmin.")
     west, east, south, north = extent
+
+    in_period = f" in {period_label}" if period_label else ""
+    pm25_layer_name = f"Predicted PM2.5, mean {period_label} (µg/m³)" if period_label else "Predicted PM2.5 (mean, µg/m³)"
+    legend_caption = f"Mean predicted PM2.5, {period_label} (µg/m³)" if period_label else "Mean predicted PM2.5 (µg/m³)"
 
     pm25_mercator = to_web_mercator_rows(pm25, north, south)
     far_mercator = to_web_mercator_rows(far, north, south)
@@ -123,7 +130,7 @@ def build_map(pm25, far_from_station, extent, stations, zones, path, desert_km, 
     ).add_to(fmap)
     bounds = [[south, west], [north, east]]
     folium.raster_layers.ImageOverlay(
-        image=_png_data_uri(rgba), bounds=bounds, opacity=0.88, name="Predicted PM2.5 (mean, µg/m³)", interactive=False, zindex=2,
+        image=_png_data_uri(rgba), bounds=bounds, opacity=0.88, name=pm25_layer_name, interactive=False, zindex=2,
     ).add_to(fmap)
     folium.raster_layers.ImageOverlay(
         image=_png_data_uri(veil), bounds=bounds, opacity=1.0, name=f"Shaded: more than {desert_km:g} km from a station",
@@ -134,7 +141,7 @@ def build_map(pm25, far_from_station, extent, stations, zones, path, desert_km, 
     for station in stations.itertuples():
         folium.CircleMarker(
             [station.latitude, station.longitude], radius=3.5, color="#fcfcfb", weight=1, fill=True, fill_color=ORANGE, fill_opacity=1.0,
-            popup=folium.Popup(f"<b>Station {station.station_id}</b><br>{station.n_months} months of PM2.5<br>mean observed {station.mean_pm25:.0f} µg/m³", max_width=220),
+            popup=folium.Popup(f"<b>Station {station.station_id}</b><br>{station.n_months} months of PM2.5{in_period}<br>mean observed {station.mean_pm25:.0f} µg/m³", max_width=220),
         ).add_to(station_layer)
     station_layer.add_to(fmap)
 
@@ -149,7 +156,7 @@ def build_map(pm25, far_from_station, extent, stations, zones, path, desert_km, 
         ).add_to(zone_layer)
     zone_layer.add_to(fmap)
 
-    legend = bcm.LinearColormap(MAP_RAMP, vmin=vmin, vmax=vmax, caption="Mean predicted PM2.5 (µg/m³)")
+    legend = bcm.LinearColormap(MAP_RAMP, vmin=vmin, vmax=vmax, caption=legend_caption)
     legend.add_to(fmap)
     folium.LayerControl(collapsed=False, position="topright").add_to(fmap)
 
@@ -159,12 +166,18 @@ def build_map(pm25, far_from_station, extent, stations, zones, path, desert_km, 
     if repo_url:
         links.append(f'<a href="{repo_url}" target="_blank" rel="noopener">Code and write-up</a>')
     link = "<br>" + " &middot; ".join(links) if links else ""
+    note = (
+        '<div style="margin-top: 8px; padding: 6px 9px; background: #fff3ec; border: 1px solid #eb6834; border-radius: 4px; font-size: 12px;">'
+        f"Period shown: <b>{period_label}</b>. An average of the monthly predictions, with each season weighted equally: "
+        "historical, not a live reading and not a forecast.</div>"
+        if period_label else ""
+    )
     box = f"""
     <div style="position: fixed; top: 10px; left: 55px; z-index: 9999; max-width: 340px; padding: 10px 14px;
                 background: rgba(252,252,251,0.94); border-radius: 6px; border: 1px solid #e1e0d9;
                 font: 13px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif; color: #0b0b0b;">
       <div style="font-weight: 700; font-size: 15px;">{title}</div>
-      <div style="color: #52514e; margin-top: 3px;">{subtitle}</div>{link}
+      <div style="color: #52514e; margin-top: 3px;">{subtitle}</div>{note}{link}
     </div>"""
     fmap.get_root().html.add_child(folium.Element(box))
     fmap.get_root().header.add_child(folium.Element(f"<title>{title}</title>"))
