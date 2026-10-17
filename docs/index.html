@@ -56,7 +56,7 @@
 
 <figure>
   <img src="figures/hero_map.png" alt="Map of predicted PM2.5 over India, Pakistan, Bangladesh, Nepal and Sri Lanka, with monitoring stations as orange dots and the area more than 100 km from any station hatched" width="1720" height="1920">
-  <figcaption>Mean predicted PM2.5, March 2025 to June 2026, with the 343 monitoring stations. Hatched: more than 100&nbsp;km from any station. A model estimate: uncertain at single cells, best read as a pattern. The map stops at 93.4&deg;E.</figcaption>
+  <figcaption>Mean predicted PM2.5, March 2025 to June 2026 (a historical average, not a live reading), with the 343 monitoring stations. Hatched: more than 100&nbsp;km from any station. A model estimate: uncertain at single cells, best read as a pattern. The map stops at 93.4&deg;E.</figcaption>
 </figure>
 
 <section>
@@ -98,7 +98,7 @@
 
 <section>
   <h2>Explore the map</h2>
-  <p class="sub">Predicted PM2.5, the stations, the area far from any station, and the 25 zones where a new monitor would cover the most exposure (predicted PM2.5 times population). <a href="map.html">Open it full screen.</a></p>
+  <p class="sub">Predicted PM2.5 averaged over March 2025 to June 2026, the stations, the area far from any station, and the 25 zones where a new monitor would cover the most exposure (predicted PM2.5 times population). These are historical averages of monthly predictions, not live readings or a forecast. <a href="map.html">Open it full screen.</a></p>
   <iframe class="mapframe" src="map.html" title="Interactive map of predicted PM2.5, monitoring stations and the monitoring desert" loading="lazy"></iframe>
 </section>
 
@@ -113,7 +113,7 @@
     <li><strong>Much of the grid is unlike the stations.</strong> 48% of predicted cell-months have three or more features outside the stations' range, where a linear model extrapolates.</li>
     <li><strong>Validated at shorter distances than predicted over.</strong> Cross-validation tests transfer at about 90 to 230&nbsp;km from the nearest training station; the 90th percentile for populated cells is 375&nbsp;km.</li>
     <li><strong>Sanity checks mostly pass.</strong> The predicted seasonal cycle follows the observed one (correlation 0.98), and 9 of 10 spot-checked places behave as expected. High-altitude Leh does not: the model has no elevation feature.</li>
-    <li><strong>Proxies and period.</strong> The wealth index and night light are proxies for income; the data cover March 2025 to June 2026, with March to June twice.</li>
+    <li><strong>Proxies and period.</strong> The wealth index and night light are proxies for income; the data cover March 2025 to June 2026, with March to June twice, and the maps are averages over that period, not a current reading.</li>
   </ul>
 </section>
 

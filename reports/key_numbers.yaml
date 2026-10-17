@@ -4,6 +4,7 @@ data:
   n_stations: 343
   n_station_months: 5222
   n_months: 16
+  period: March 2025 to June 2026
   n_cells: 434940
   n_cells_study_area: 155119
   grid_cell_size_deg: 0.05
