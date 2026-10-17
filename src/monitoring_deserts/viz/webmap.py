@@ -117,7 +117,7 @@ window.addEventListener("load", function () {
     var text = i === 0
       ? "Average of the " + last + " monthly predictions, each season weighted equally."
       : "Model estimate for " + frames[i].label + ", from that month's satellite and weather data.";
-    note.textContent = text + " Historical, not a live reading and not a forecast.";
+    note.textContent = text;
     if (heading) { heading.innerHTML = "Showing: <b>" + frames[i].label + "</b>"; }
   }
   select.addEventListener("change", function () { show(parseInt(select.value, 10)); });
@@ -147,8 +147,7 @@ def build_map(pm25, far_from_station, extent, stations, zones, path, desert_km, 
         repo_url (str | None): Link shown in the box, if given.
         home_url (str | None): Link back to the summary page, shown in the box if given.
         period_label (str | None): The period the predictions describe, e.g. "March 2025 to June 2026". If given,
-            it is shown in a highlighted note in the title box, in the layer name and in the colour legend, together
-            with the reminder that the map is a historical average and not a live reading or a forecast.
+            it is shown in a highlighted note in the title box, in the layer name and in the colour legend.
         monthly (dict | None): Month label (for example "March 2025") to a 2-D north-up raster of that month's
             predicted PM2.5, in chronological order, same shape as `pm25`. If given, the map gets a month selector
             (drop-down, slider and previous/next buttons) that swaps the PM2.5 image, with "All months (average)"
@@ -248,14 +247,12 @@ def build_map(pm25, far_from_station, extent, stations, zones, path, desert_km, 
     if monthly:
         note = (
             '<div style="margin-top: 8px; padding: 6px 9px; background: #fff3ec; border: 1px solid #eb6834; border-radius: 4px; font-size: 12px;">'
-            f'<span id="period-note"></span><br>Choose a month from {list(monthly)[0]} to {list(monthly)[-1]} with the selector at the bottom left. '
-            "Historical model estimates, not live readings and not forecasts.</div>"
+            f'<span id="period-note"></span><br>Choose a month from {list(monthly)[0]} to {list(monthly)[-1]} with the selector at the bottom left.</div>'
         )
     else:
         note = (
             '<div style="margin-top: 8px; padding: 6px 9px; background: #fff3ec; border: 1px solid #eb6834; border-radius: 4px; font-size: 12px;">'
-            f"Period shown: <b>{period_label}</b>. An average of the monthly predictions, with each season weighted equally: "
-            "historical, not a live reading and not a forecast.</div>"
+            f"Period shown: <b>{period_label}</b>. An average of the monthly predictions, with each season weighted equally.</div>"
             if period_label else ""
         )
     box = f"""
